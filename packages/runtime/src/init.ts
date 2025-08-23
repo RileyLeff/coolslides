@@ -79,12 +79,30 @@ export async function init(deck?: DeckManifest, slides?: SlideDoc[]): Promise<Ru
   // Rooms client (room from ?room= or default)
   const rooms = new RoomsClient(bus, {});
   rooms.connect();
+  // Forward navigation events to room for basic sync
+  bus.on('slide:enter', ({ slideId, fragment }) => {
+    try { rooms.sendEvent('slide:change', { slideId, fragment }); } catch {}
+  });
   
   // Plugin manager (load deck.plugins if provided)
   const pluginManager = new PluginManager(context, bus, importMap, rooms);
   if (Array.isArray(deckData.plugins) && deckData.plugins.length) {
     try { await pluginManager.loadAll(deckData.plugins); } catch (e) { console.warn('Plugins init failed', e); }
   }
+  
+  // Follow remote navigation events from rooms (basic audience sync)
+  bus.on('rooms:event:slide:change', (evt: any) => {
+    try {
+      const { slideId, fragment } = evt.data || {};
+      if (typeof slideId === 'string') {
+        const current = router.getCurrentSlide();
+        const currentFrag = router.getCurrentFragment();
+        if (current !== slideId || currentFrag !== (fragment || 0)) {
+          router.navigate(slideId, fragment || 0);
+        }
+      }
+    } catch {}
+  });
   
   // Preload any existing slot components
   await moduleLoader.preloadAllSlotComponents();

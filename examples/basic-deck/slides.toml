@@ -5,7 +5,9 @@ title = "Coolslides Example Presentation"
 theme = "themes/default/theme.css"
 tokens = "themes/default/tokens.css"
 
-plugins = []
+plugins = [
+  "/packages/plugins-stdlib/dist/demo/index.js"
+]
 
 [transitions]
 default = "slide"
