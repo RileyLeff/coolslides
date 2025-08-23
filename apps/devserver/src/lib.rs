@@ -173,6 +173,7 @@ impl AppState {
 pub fn create_router(state: AppState) -> Router {
     Router::new()
         // API routes
+        .route("/", get(root_index))
         .route("/api/deck", get(get_deck))
         .route("/api/slide/:id", get(get_slide))
         .route("/api/rooms/:room_id/record/start", post(start_recording))
@@ -202,6 +203,32 @@ pub fn create_router(state: AppState) -> Router {
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
         .with_state(state)
+}
+
+/// Root index page serving the current deck
+async fn root_index(State(state): State<AppState>) -> Result<Html<String>, StatusCode> {
+    let deck = {
+        let deck_guard = state.deck.read().await;
+        deck_guard.as_ref().ok_or(StatusCode::NOT_FOUND)?.clone()
+    };
+    let slides = {
+        let slides_guard = state.slides.read().await;
+        slides_guard.clone()
+    };
+    let components_registry = {
+        let comps_guard = state.components.read().await;
+        comps_guard.clone()
+    };
+    let deck_root = {
+        let root_guard = state.deck_root.read().await;
+        root_guard.clone()
+    };
+
+    // For dev root, do NOT set a file:// base href; let assets load via http
+    let html = generate_export_html(&deck, &slides, components_registry.as_ref(), None, &state.sanitization_config)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Html(html))
 }
 
 /// Load deck + slides + component registry from a directory (utility for CLI/exports)
@@ -642,6 +669,7 @@ fn generate_export_html(
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{}</title>
     {}
+    <script type="importmap">{}</script>
     <!-- Inlined Theme CSS -->
     <style>
         {}
@@ -667,6 +695,14 @@ fn generate_export_html(
 </html>"#,
         deck.title,
         base_href.as_ref().map(|u| format!("<base href=\"{}\">", u)).unwrap_or_default(),
+        serde_json::to_string(&serde_json::json!({
+            "imports": {
+                "@coolslides/runtime": "/packages/runtime/dist/index.js",
+                "@coolslides/components": "/packages/components/dist/index.js",
+                "@coolslides/component-sdk": "/packages/component-sdk/dist/index.js",
+                "@coolslides/plugins-stdlib": "/packages/plugins-stdlib/dist/index.js"
+            }
+        })).unwrap_or("{}".into()),
         theme_css.unwrap_or_default(),
         tokens_css.map(|c| format!("<style>\n{}\n</style>", c)).unwrap_or_default(),
         slides_html,
