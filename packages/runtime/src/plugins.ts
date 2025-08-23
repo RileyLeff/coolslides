@@ -36,8 +36,9 @@ export class PluginManager {
     for (const spec of specs) {
       try {
         const modPath = this.importMap[spec] || spec;
-        const mod = await import(modPath) as any as PluginModule;
-        await this.initialize(mod);
+        const mod = await import(modPath) as any;
+        const plugin: PluginModule = (mod && (mod.default || mod)) as PluginModule;
+        await this.initialize(plugin);
       } catch (e) {
         console.warn('Failed to load plugin', spec, e);
       }
@@ -81,4 +82,3 @@ export class PluginManager {
     } catch {}
   }
 }
-

@@ -747,42 +747,22 @@ fn generate_export_html(
             tokens_css.map(|c| format!("<style>\n{}\n</style>", c)).unwrap_or_default(),
         )
     } else {
+        // In dev, prefer absolute paths so CSS @import resolves reliably
+        let theme_href = if deck.theme.starts_with('/') { deck.theme.clone() } else { format!("/{}", deck.theme) };
+        let tokens_href = deck.tokens.as_ref().map(|t| if t.starts_with('/') { t.clone() } else { format!("/{}", t) });
         (
             String::new(),
             format!(
                 "<link rel=\"stylesheet\" href=\"{}\"/>{}",
-                deck.theme,
-                deck.tokens.as_ref().map(|t| format!("\n<link rel=\\\"stylesheet\\\" href=\\\"{}\\\"/>", t)).unwrap_or_default()
+                theme_href,
+                tokens_href.map(|t| format!("\n<link rel=\\\"stylesheet\\\" href=\\\"{}\\\"/>", t)).unwrap_or_default()
             ),
         )
     };
 
     // In dev mode (no deck_root), inject a tiny WS-based auto-reload client
     let dev_reload_script = if deck_root.is_none() {
-        r#"<script>(function(){try{var p=location.protocol==='https:'?'wss':'ws';var ws=new WebSocket(p+'://'+location.host+'/rooms/__reload');
-var overlay;
-function ensureOverlay(){
-  if (overlay) return overlay;
-  overlay = document.createElement('div');
-  overlay.setAttribute('style','position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.35);color:#fff;z-index:2147483647;font:600 16px system-ui, sans-serif');
-  overlay.innerHTML = '<div style="padding:12px 16px;background:#111;border-radius:8px;border:1px solid #333;box-shadow:0 2px 8px rgba(0,0,0,.4)">Reloading…</div>';
-  document.addEventListener('DOMContentLoaded', function(){ document.body.appendChild(overlay); }, { once: true });
-  return overlay;
-}
-ws.onmessage=function(e){
-  try{
-    var m=JSON.parse(e.data);
-    if(m.type==='event'&&m.event){
-      if(m.event.name==='reload:prepare'){
-        ensureOverlay(); if (overlay && overlay.style) { overlay.style.display='flex'; }
-      }
-      if(m.event.name==='reload'){
-        ensureOverlay(); if (overlay && overlay.style) { overlay.style.display='flex'; }
-        setTimeout(function(){ location.reload(); }, 10);
-      }
-    }
-  }catch(_){ }
-};}catch(_){})()</script>"#.to_string()
+        r#"<script>(function(){try{var p=location.protocol==='https:'?'wss':'ws';var ws=new WebSocket(p+'://'+location.host+'/rooms/__reload');var overlay=null;function show(){if(!overlay){overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,0.35);color:#fff;z-index:2147483647;font:600 16px system-ui,sans-serif';overlay.innerHTML='<div style="padding:12px 16px;background:#111;border-radius:8px;border:1px solid #333;box-shadow:0 2px 8px rgba(0,0,0,.4)">Reloading…</div>';document.addEventListener('DOMContentLoaded',function(){document.body.appendChild(overlay);},{once:true});}if(overlay&&overlay.style){overlay.style.display='flex';}}ws.onmessage=function(e){var m;try{m=JSON.parse(e.data);}catch(_){return;}if(m&&m.type==='event'&&m.event){if(m.event.name==='reload:prepare'){show();}if(m.event.name==='reload'){show();setTimeout(function(){location.reload();},10);}}};}catch(_){}})();</script>"#.to_string()
     } else { String::new() };
 
     let html = format!(r#"<!DOCTYPE html>
