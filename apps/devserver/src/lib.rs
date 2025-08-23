@@ -662,6 +662,23 @@ fn generate_export_html(
     let tokens_css = deck.tokens.as_ref().and_then(|p| inline_css(deck_root, p));
     let base_href = deck_root.map(|p| format!("file://{}/", p.canonicalize().unwrap_or_else(|_| p.to_path_buf()).to_string_lossy()));
     
+    // Build CSS includes based on context (export vs dev)
+    let (theme_style_content, tokens_block) = if deck_root.is_some() {
+        (
+            theme_css.unwrap_or_default(),
+            tokens_css.map(|c| format!("<style>\n{}\n</style>", c)).unwrap_or_default(),
+        )
+    } else {
+        (
+            String::new(),
+            format!(
+                "<link rel=\"stylesheet\" href=\"{}\"/>{}",
+                deck.theme,
+                deck.tokens.as_ref().map(|t| format!("\n<link rel=\\\"stylesheet\\\" href=\\\"{}\\\"/>", t)).unwrap_or_default()
+            ),
+        )
+    };
+
     let html = format!(r#"<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -670,11 +687,11 @@ fn generate_export_html(
     <title>{}</title>
     {}
     <script type="importmap">{}</script>
-    <!-- Inlined Theme CSS -->
+    <!-- Theme CSS (inline for export; linked in dev) -->
     <style>
         {}
     </style>
-    <!-- Inlined Tokens CSS -->
+    <!-- Tokens CSS (inline for export; linked in dev) -->
     {}
     <script type="module" src="/packages/runtime/dist/index.js"></script>
     <script type="module" src="/packages/components/dist/index.js"></script>
@@ -703,8 +720,8 @@ fn generate_export_html(
                 "@coolslides/plugins-stdlib": "/packages/plugins-stdlib/dist/index.js"
             }
         })).unwrap_or("{}".into()),
-        theme_css.unwrap_or_default(),
-        tokens_css.map(|c| format!("<style>\n{}\n</style>", c)).unwrap_or_default(),
+        theme_style_content,
+        tokens_block,
         slides_html,
         serde_json::to_string_pretty(deck)?,
         serde_json::to_string_pretty(&slides.values().collect::<Vec<_>>())?
