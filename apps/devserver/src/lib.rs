@@ -13,9 +13,22 @@ use tokio::sync::RwLock;
 use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 use tokio::fs;
 use pulldown_cmark::{Parser, html};
+use maplit::{hashset, hashmap};
 
 pub mod export;
 pub mod rooms;
+
+/// Configuration for HTML sanitization
+#[derive(Clone)]
+pub struct SanitizationConfig {
+    pub strict_mode: bool,
+}
+
+impl SanitizationConfig {
+    pub fn new(strict_mode: bool) -> Self {
+        Self { strict_mode }
+    }
+}
 
 /// Development server state
 #[derive(Clone)]
@@ -23,6 +36,7 @@ pub struct AppState {
     pub room_manager: Arc<rooms::RoomManager>,
     pub deck: Arc<RwLock<Option<DeckManifest>>>,
     pub slides: Arc<RwLock<HashMap<String, SlideDoc>>>,
+    pub sanitization_config: SanitizationConfig,
 }
 
 impl AppState {
@@ -31,6 +45,16 @@ impl AppState {
             room_manager: Arc::new(rooms::RoomManager::new()),
             deck: Arc::new(RwLock::new(None)),
             slides: Arc::new(RwLock::new(HashMap::new())),
+            sanitization_config: SanitizationConfig::new(false), // Default to non-strict
+        }
+    }
+    
+    pub fn new_with_strict_mode(strict_mode: bool) -> Self {
+        Self {
+            room_manager: Arc::new(rooms::RoomManager::new()),
+            deck: Arc::new(RwLock::new(None)),
+            slides: Arc::new(RwLock::new(HashMap::new())),
+            sanitization_config: SanitizationConfig::new(strict_mode),
         }
     }
 
@@ -119,6 +143,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/export/html", post(export_html))
         .route("/api/importmap", get(get_import_map))
         .route("/healthz", get(health_check))
+        .route("/test/markdown", post(test_markdown_sanitization))
         
         // WebSocket routes
         .route("/rooms/:room_id", get(websocket_handler))
@@ -141,6 +166,24 @@ pub fn create_router(state: AppState) -> Router {
 /// Health check endpoint
 async fn health_check() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "ok": true }))
+}
+
+#[derive(Deserialize)]
+struct MarkdownTestRequest {
+    markdown: String,
+}
+
+/// Test endpoint for markdown sanitization
+async fn test_markdown_sanitization(
+    State(state): State<AppState>,
+    Json(request): Json<MarkdownTestRequest>,
+) -> Json<serde_json::Value> {
+    let sanitized_html = render_markdown_to_html(&request.markdown, &state.sanitization_config);
+    Json(serde_json::json!({
+        "original": request.markdown,
+        "sanitized": sanitized_html,
+        "strict_mode": state.sanitization_config.strict_mode
+    }))
 }
 
 /// Get import map for package resolution
@@ -239,8 +282,8 @@ async fn export_pdf(
         slides_guard.clone()
     };
 
-    // Generate slides HTML
-    let slides_html = generate_slides_html(&deck, &slides).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    // Generate slides HTML with sanitization config
+    let slides_html = generate_slides_html(&deck, &slides, &state.sanitization_config).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Configure export
     let profile = match request.profile.as_deref() {
@@ -285,7 +328,7 @@ async fn export_html(
     };
 
     // Generate complete HTML export
-    let html_content = generate_export_html(&deck, &slides).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let html_content = generate_export_html(&deck, &slides, &state.sanitization_config).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Response::builder()
         .status(StatusCode::OK)
@@ -295,20 +338,24 @@ async fn export_html(
         .unwrap())
 }
 
-fn generate_slides_html(deck: &DeckManifest, slides: &HashMap<String, SlideDoc>) -> anyhow::Result<String> {
+fn generate_slides_html(
+    deck: &DeckManifest, 
+    slides: &HashMap<String, SlideDoc>,
+    config: &SanitizationConfig
+) -> anyhow::Result<String> {
     let mut html_parts = Vec::new();
 
     for item in &deck.sequence {
         match item {
             coolslides_core::DeckItem::Ref { slide_id } => {
                 if let Some(slide) = slides.get(slide_id) {
-                    html_parts.push(generate_slide_html(slide)?);
+                    html_parts.push(generate_slide_html(slide, config)?);
                 }
             }
             coolslides_core::DeckItem::Group { slides: group_slides, .. } => {
                 for slide_id in group_slides {
                     if let Some(slide) = slides.get(slide_id) {
-                        html_parts.push(generate_slide_html(slide)?);
+                        html_parts.push(generate_slide_html(slide, config)?);
                     }
                 }
             }
@@ -344,7 +391,7 @@ fn get_component_tag(component_name: &str) -> &'static str {
     }
 }
 
-fn generate_slide_html(slide: &SlideDoc) -> anyhow::Result<String> {
+fn generate_slide_html(slide: &SlideDoc, config: &SanitizationConfig) -> anyhow::Result<String> {
     let tag = get_component_tag(&slide.component.name);
     
     let html = format!(
@@ -354,7 +401,7 @@ fn generate_slide_html(slide: &SlideDoc) -> anyhow::Result<String> {
         slide.id,
         tag,
         format_props(&slide.props)?,
-        format_slots(&slide.slots)?,
+        format_slots(&slide.slots, config)?,
         tag
     );
 
@@ -378,19 +425,59 @@ fn format_props(props: &serde_json::Value) -> anyhow::Result<String> {
     }
 }
 
-fn render_markdown_to_html(markdown: &str) -> String {
+fn render_markdown_to_html(markdown: &str, config: &SanitizationConfig) -> String {
     let parser = Parser::new(markdown);
     let mut html_output = String::new();
     html::push_html(&mut html_output, parser);
-    html_output
+    
+    // Configure sanitization based on strict mode
+    let sanitized = if config.strict_mode {
+        // Strict mode: very limited HTML tags allowed
+        ammonia::Builder::new()
+            .tags(hashset![
+                "p", "br", "strong", "em", "code", "pre",
+                "h1", "h2", "h3", "h4", "h5", "h6",
+                "ul", "ol", "li", "blockquote"
+            ])
+            .clean_content_tags(hashset!["script", "style"])
+            .strip_comments(true)
+            .link_rel(None) // Remove all link relations
+            .clean(&html_output)
+    } else {
+        // Default mode: presentation-friendly tags
+        ammonia::Builder::new()
+            .tags(hashset![
+                "p", "br", "strong", "em", "code", "pre", "span", "div",
+                "h1", "h2", "h3", "h4", "h5", "h6",
+                "ul", "ol", "li", "blockquote", "a", "img",
+                "table", "thead", "tbody", "tr", "td", "th"
+            ])
+            .tag_attributes(hashmap![
+                "a" => hashset!["href", "title"],
+                "img" => hashset!["src", "alt", "title", "width", "height"],
+                "code" => hashset!["class"],
+                "pre" => hashset!["class"],
+                "span" => hashset!["class"],
+                "div" => hashset!["class"]
+            ])
+            .clean_content_tags(hashset!["script", "style"])
+            .strip_comments(true)
+            .link_rel(Some("noopener noreferrer"))
+            .clean(&html_output)
+    };
+    
+    sanitized.to_string()
 }
 
-fn format_slots(slots: &HashMap<String, coolslides_core::Slot>) -> anyhow::Result<String> {
+fn format_slots(
+    slots: &HashMap<String, coolslides_core::Slot>,
+    config: &SanitizationConfig
+) -> anyhow::Result<String> {
     let slot_content: Vec<String> = slots.iter()
         .map(|(name, slot)| {
             match slot {
                 coolslides_core::Slot::Markdown { value } => {
-                    let rendered_html = render_markdown_to_html(value);
+                    let rendered_html = render_markdown_to_html(value, config);
                     format!(r#"<div slot="{}">{}</div>"#, name, rendered_html)
                 }
                 coolslides_core::Slot::Component { tag, props, .. } => {
@@ -403,8 +490,12 @@ fn format_slots(slots: &HashMap<String, coolslides_core::Slot>) -> anyhow::Resul
     Ok(slot_content.join(""))
 }
 
-fn generate_export_html(deck: &DeckManifest, slides: &HashMap<String, SlideDoc>) -> anyhow::Result<String> {
-    let slides_html = generate_slides_html(deck, slides)?;
+fn generate_export_html(
+    deck: &DeckManifest, 
+    slides: &HashMap<String, SlideDoc>,
+    config: &SanitizationConfig
+) -> anyhow::Result<String> {
+    let slides_html = generate_slides_html(deck, slides, config)?;
     
     let html = format!(r#"<!DOCTYPE html>
 <html lang="en">
@@ -501,9 +592,9 @@ async fn audience_ui() -> Html<&'static str> {
     "#)
 }
 
-/// Start the development server with directory
-pub async fn start_server_with_dir(host: &str, port: u16, deck_dir: Option<&str>) -> anyhow::Result<()> {
-    let state = AppState::new();
+/// Start the development server with directory and strict mode
+pub async fn start_server_with_dir(host: &str, port: u16, deck_dir: Option<&str>, strict_mode: bool) -> anyhow::Result<()> {
+    let state = AppState::new_with_strict_mode(strict_mode);
     
     // Load deck from directory (default to current directory)
     let deck_path = deck_dir.unwrap_or(".");
@@ -529,5 +620,10 @@ pub async fn start_server_with_dir(host: &str, port: u16, deck_dir: Option<&str>
 
 /// Start the development server
 pub async fn start_server(host: &str, port: u16) -> anyhow::Result<()> {
-    start_server_with_dir(host, port, None).await
+    start_server_with_dir(host, port, None, false).await
+}
+
+/// Start the development server with strict mode
+pub async fn start_server_with_strict(host: &str, port: u16, strict_mode: bool) -> anyhow::Result<()> {
+    start_server_with_dir(host, port, None, strict_mode).await
 }

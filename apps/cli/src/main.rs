@@ -135,11 +135,14 @@ async fn main() -> Result<()> {
             println!("Creating new slide: {} with ID: {}", component_name, id);
             // TODO: Implement new command
         }
-        Commands::Dev { open: _, port, host, strict: _, seed: _ } => {
+        Commands::Dev { open: _, port, host, strict, seed: _ } => {
             println!("Starting dev server on {}:{}", host, port);
+            if strict {
+                println!("Running in strict mode (enhanced HTML sanitization)");
+            }
             
             // Start the development server
-            match coolslides_server::start_server(&host, port).await {
+            match coolslides_server::start_server_with_strict(&host, port, strict).await {
                 Ok(()) => {
                     println!("Server stopped successfully");
                 }

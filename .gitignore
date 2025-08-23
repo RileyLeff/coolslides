@@ -3,6 +3,7 @@
 /Cargo.lock
 **/*.rs.bk
 *.pdb
+target
 
 # Node.js
 node_modules/

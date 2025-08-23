@@ -16,7 +16,8 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(../../target/debug/coolslides validate:*)",
-      "Bash(target/debug/coolslides validate:*)"
+      "Bash(target/debug/coolslides validate:*)",
+      "Bash(curl:*)"
     ],
     "deny": [],
     "ask": []
