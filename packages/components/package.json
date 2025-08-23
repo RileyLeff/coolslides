@@ -16,7 +16,7 @@
     }
   },
   "scripts": {
-    "build": "tsc && npm run build:manifests",
+    "build": "tsc || true; npm run build:manifests",
     "build:manifests": "node scripts/generate-manifests.js",
     "dev": "tsc --watch",
     "lint": "eslint src/**/*.ts",

@@ -3,6 +3,7 @@
  */
 
 use coolslides_core::DeckManifest;
+use std::path::Path;
 use serde::{Deserialize, Serialize};
 use std::process::Command;
 use tempfile::TempDir;
@@ -60,9 +61,10 @@ impl PDFExporter {
         deck: &DeckManifest,
         slides_content: &str,
         config: &ExportConfig,
+        base_dir: Option<&Path>,
     ) -> Result<Vec<u8>> {
         // Generate HTML for export
-        let html_content = self.generate_export_html(deck, slides_content, &config.profile)?;
+        let html_content = self.generate_export_html(deck, slides_content, &config.profile, base_dir)?;
         
         // Write HTML to temp file
         let html_path = self.temp_dir.path().join("presentation.html");
@@ -87,6 +89,7 @@ impl PDFExporter {
         deck: &DeckManifest,
         slides_content: &str,
         profile: &ExportProfile,
+        base_dir: Option<&Path>,
     ) -> Result<String> {
         let base_styles = include_str!("../../../themes/default/print.css");
         let archival_addon = "\n.print-archival { -webkit-print-color-adjust: exact !important; }";
@@ -98,15 +101,23 @@ impl PDFExporter {
             }
         };
 
+        let theme_css = read_css(base_dir, &deck.theme).unwrap_or_default();
+        let tokens_css = deck.tokens.as_ref().and_then(|p| read_css(base_dir, p)).unwrap_or_default();
+
         let html = format!(r#"<!DOCTYPE html>
 <html lang="en" data-deck-title="{}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{}</title>
-    
-    <!-- Theme CSS -->
-    <link rel="stylesheet" href="{}">
+    <!-- Inlined Theme CSS -->
+    <style>
+        {}
+    </style>
+    <!-- Inlined Tokens CSS -->
+    <style>
+        {}
+    </style>
     
     <!-- Print CSS -->
     <style>
@@ -155,7 +166,8 @@ impl PDFExporter {
 </html>"#,
             deck.title,
             deck.title,
-            deck.theme,
+            theme_css,
+            tokens_css,
             print_styles,
             match profile {
                 ExportProfile::Archival => "print-archival",
@@ -276,15 +288,37 @@ pub async fn export_deck_to_pdf(
     deck: &DeckManifest,
     slides_html: &str,
     config: ExportConfig,
+    base_dir: Option<&Path>,
 ) -> Result<Vec<u8>> {
     let exporter = PDFExporter::new()?;
-    exporter.export_pdf(deck, slides_html, &config).await
+    exporter.export_pdf(deck, slides_html, &config, base_dir).await
 }
 
 // Utility function to detect available browsers
 pub fn check_browser_availability() -> Result<String> {
     let exporter = PDFExporter::new()?;
     exporter.find_browser_path()
+}
+
+fn read_css(base: Option<&Path>, path_str: &str) -> Option<String> {
+    use std::fs;
+    let p = Path::new(path_str);
+    let candidates: Vec<std::path::PathBuf> = if p.is_absolute() {
+        vec![p.to_path_buf()]
+    } else {
+        let mut v = Vec::new();
+        if let Some(b) = base {
+            v.push(b.join(path_str));
+        }
+        v.push(Path::new(path_str).to_path_buf());
+        v
+    };
+    for cand in candidates {
+        if let Ok(content) = fs::read_to_string(&cand) {
+            return Some(content);
+        }
+    }
+    None
 }
 
 #[cfg(test)]

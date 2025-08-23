@@ -24,8 +24,7 @@
     }
   },
   "scripts": {
-    "build": "tsc && npm run build:manifests",
-    "build:manifests": "node scripts/generate-manifests.js",
+    "build": "tsc",
     "dev": "tsc --watch",
     "lint": "eslint src/**/*.ts",
     "typecheck": "tsc --noEmit"

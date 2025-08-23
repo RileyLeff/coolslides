@@ -1,0 +1,40 @@
+{
+  "name": "TitleSlide",
+  "version": "1.0.0",
+  "tag": "cs-title-slide",
+  "module": "/components/dist/slides/TitleSlide.js",
+  "schema": {
+    "type": "object",
+    "required": [
+      "title"
+    ],
+    "properties": {
+      "title": {
+        "type": "string",
+        "description": "Main title text"
+      },
+      "subtitle": {
+        "type": "string",
+        "description": "Optional subtitle text"
+      },
+      "alignment": {
+        "type": "string",
+        "description": "Text alignment",
+        "enum": [
+          "left",
+          "center",
+          "right"
+        ],
+        "default": "center"
+      }
+    }
+  },
+  "tokensUsed": [
+    "--title-color",
+    "--title-size",
+    "--subtitle-color",
+    "--subtitle-size",
+    "--background-color",
+    "--accent-color"
+  ]
+}

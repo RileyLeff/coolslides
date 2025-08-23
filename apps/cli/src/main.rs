@@ -44,6 +44,9 @@ enum Commands {
         /// Host to bind to
         #[arg(long, default_value = "127.0.0.1")]
         host: String,
+        /// Directory to serve deck from
+        #[arg(long, default_value = ".")]
+        dir: String,
         /// Enable strict mode
         #[arg(long)]
         strict: bool,
@@ -135,14 +138,28 @@ async fn main() -> Result<()> {
             println!("Creating new slide: {} with ID: {}", component_name, id);
             // TODO: Implement new command
         }
-        Commands::Dev { open: _, port, host, strict, seed: _ } => {
-            println!("Starting dev server on {}:{}", host, port);
+        Commands::Dev { open, port, host, dir, strict, seed: _ } => {
+            println!("Starting dev server on {}:{} (dir: {})", host, port, dir);
             if strict {
                 println!("Running in strict mode (enhanced HTML sanitization)");
             }
-            
+            if open {
+                let url = format!("http://{}:{}", host, port);
+                println!("Will open browser: {}", url);
+                // Best-effort open in the background
+                tokio::spawn(async move {
+                    use std::process::Command;
+                    #[cfg(target_os = "macos")]
+                    let _ = Command::new("open").arg(&url).spawn();
+                    #[cfg(all(unix, not(target_os = "macos")))]
+                    let _ = Command::new("xdg-open").arg(&url).spawn();
+                    #[cfg(target_os = "windows")]
+                    let _ = Command::new("cmd").args(["/C", "start", &url]).spawn();
+                });
+            }
+
             // Start the development server
-            match coolslides_server::start_server_with_strict(&host, port, strict).await {
+            match coolslides_server::start_server_with_dir(&host, port, Some(&dir), strict).await {
                 Ok(()) => {
                     println!("Server stopped successfully");
                 }

@@ -1,0 +1,16 @@
+export declare function debounce<T extends (...args: any[]) => any>(func: T, wait: number, immediate?: boolean): T;
+export declare function throttle<T extends (...args: any[]) => any>(func: T, wait: number): T;
+export declare function classNames(...args: (string | Record<string, boolean> | undefined | null)[]): string;
+export declare function escapeHtml(unsafe: string): string;
+export declare function getCSSCustomProperty(property: string, element?: HTMLElement): string;
+export declare function setCSSCustomProperty(property: string, value: string, element?: HTMLElement): void;
+export declare function matchesMediaQuery(query: string): boolean;
+export declare function createMediaQueryWatcher(query: string, callback: (matches: boolean) => void): () => void;
+export declare function prefersReducedMotion(): boolean;
+export declare function trapFocus(element: HTMLElement): () => void;
+export declare function createIntersectionObserver(callback: (entries: IntersectionObserverEntry[]) => void, options?: IntersectionObserverInit): IntersectionObserver;
+export declare function createResizeObserver(callback: (entries: ResizeObserverEntry[]) => void): ResizeObserver;
+export declare function requestAnimationFrame(): Promise<number>;
+export declare function nextAnimationFrame(): Promise<number>;
+export declare function isHTMLElement(node: Node): node is HTMLElement;
+export declare function isCustomElement(element: Element): boolean;

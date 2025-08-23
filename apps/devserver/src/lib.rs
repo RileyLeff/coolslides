@@ -6,9 +6,9 @@ use axum::{
     Router,
     body::Body,
 };
-use coolslides_core::{DeckManifest, SlideDoc};
+use coolslides_core::{DeckManifest, SlideDoc, components, ComponentRegistry};
 use serde::Deserialize;
-use std::{collections::HashMap, path::Path, sync::Arc};
+use std::{collections::HashMap, path::{Path, PathBuf}, sync::Arc};
 use tokio::sync::RwLock;
 use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 use tokio::fs;
@@ -37,6 +37,8 @@ pub struct AppState {
     pub deck: Arc<RwLock<Option<DeckManifest>>>,
     pub slides: Arc<RwLock<HashMap<String, SlideDoc>>>,
     pub sanitization_config: SanitizationConfig,
+    pub components: Arc<RwLock<Option<ComponentRegistry>>>,
+    pub deck_root: Arc<RwLock<Option<PathBuf>>>,
 }
 
 impl AppState {
@@ -46,6 +48,8 @@ impl AppState {
             deck: Arc::new(RwLock::new(None)),
             slides: Arc::new(RwLock::new(HashMap::new())),
             sanitization_config: SanitizationConfig::new(false), // Default to non-strict
+            components: Arc::new(RwLock::new(None)),
+            deck_root: Arc::new(RwLock::new(None)),
         }
     }
     
@@ -55,6 +59,8 @@ impl AppState {
             deck: Arc::new(RwLock::new(None)),
             slides: Arc::new(RwLock::new(HashMap::new())),
             sanitization_config: SanitizationConfig::new(strict_mode),
+            components: Arc::new(RwLock::new(None)),
+            deck_root: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -95,6 +101,10 @@ impl AppState {
             let mut deck = self.deck.write().await;
             *deck = Some(deck_manifest);
         }
+        {
+            let mut root = self.deck_root.write().await;
+            *root = Some(deck_dir.to_path_buf());
+        }
         
         let slide_count = slides_map.len();
         
@@ -103,6 +113,35 @@ impl AppState {
             *slides = slides_map;
         }
         
+        // Try to load component manifests for tag resolution and validation support
+        let possible_components_paths = [
+            Path::new("packages/components/src"),        // From project root
+            Path::new("../../packages/components/src"),  // From examples/basic-deck
+            Path::new("../packages/components/src"),     // From apps/devserver
+        ];
+
+        let registry_opt = possible_components_paths
+            .iter()
+            .find(|path| path.exists())
+            .and_then(|components_dir| {
+                match components::extract_manifests_from_directory(components_dir) {
+                    Ok(registry) => Some(registry),
+                    Err(e) => {
+                        eprintln!(
+                            "Warning: Failed to load component manifests from {}: {}",
+                            components_dir.display(),
+                            e
+                        );
+                        None
+                    }
+                }
+            });
+
+        {
+            let mut comps = self.components.write().await;
+            *comps = registry_opt;
+        }
+
         println!("Loaded deck manifest and {} slides", slide_count);
         Ok(())
     }
@@ -156,6 +195,8 @@ pub fn create_router(state: AppState) -> Router {
         .nest_service("/static", ServeDir::new("static"))
         .nest_service("/packages/runtime/dist", ServeDir::new("packages/runtime/dist"))
         .nest_service("/packages/components/dist", ServeDir::new("packages/components/dist"))
+        .nest_service("/packages/component-sdk/dist", ServeDir::new("packages/component-sdk/dist"))
+        .nest_service("/packages/plugins-stdlib/dist", ServeDir::new("packages/plugins-stdlib/dist"))
         .nest_service("/themes", ServeDir::new("themes"))
         
         .layer(CorsLayer::permissive())
@@ -283,7 +324,12 @@ async fn export_pdf(
     };
 
     // Generate slides HTML with sanitization config
-    let slides_html = generate_slides_html(&deck, &slides, &state.sanitization_config).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let components_registry = {
+        let comps_guard = state.components.read().await;
+        comps_guard.clone()
+    };
+    let slides_html = generate_slides_html(&deck, &slides, components_registry.as_ref(), &state.sanitization_config)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Configure export
     let profile = match request.profile.as_deref() {
@@ -298,8 +344,13 @@ async fn export_pdf(
         output_path: "export.pdf".to_string(),
     };
 
+    // Determine base directory for CSS resolution
+    let deck_root = {
+        let guard = state.deck_root.read().await;
+        guard.clone()
+    };
     // Generate PDF
-    let pdf_data = export::export_deck_to_pdf(&deck, &slides_html, config)
+    let pdf_data = export::export_deck_to_pdf(&deck, &slides_html, config, deck_root.as_deref())
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
@@ -328,7 +379,16 @@ async fn export_html(
     };
 
     // Generate complete HTML export
-    let html_content = generate_export_html(&deck, &slides, &state.sanitization_config).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    let components_registry = {
+        let comps_guard = state.components.read().await;
+        comps_guard.clone()
+    };
+    let deck_root = {
+        let guard = state.deck_root.read().await;
+        guard.clone()
+    };
+    let html_content = generate_export_html(&deck, &slides, components_registry.as_ref(), deck_root.as_deref(), &state.sanitization_config)
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Response::builder()
         .status(StatusCode::OK)
@@ -339,9 +399,10 @@ async fn export_html(
 }
 
 fn generate_slides_html(
-    deck: &DeckManifest, 
+    deck: &DeckManifest,
     slides: &HashMap<String, SlideDoc>,
-    config: &SanitizationConfig
+    components: Option<&ComponentRegistry>,
+    config: &SanitizationConfig,
 ) -> anyhow::Result<String> {
     let mut html_parts = Vec::new();
 
@@ -349,13 +410,13 @@ fn generate_slides_html(
         match item {
             coolslides_core::DeckItem::Ref { slide_id } => {
                 if let Some(slide) = slides.get(slide_id) {
-                    html_parts.push(generate_slide_html(slide, config)?);
+                    html_parts.push(generate_slide_html(slide, components, config)?);
                 }
             }
             coolslides_core::DeckItem::Group { slides: group_slides, .. } => {
                 for slide_id in group_slides {
                     if let Some(slide) = slides.get(slide_id) {
-                        html_parts.push(generate_slide_html(slide, config)?);
+                        html_parts.push(generate_slide_html(slide, components, config)?);
                     }
                 }
             }
@@ -365,41 +426,39 @@ fn generate_slides_html(
     Ok(html_parts.join("\n"))
 }
 
-fn get_component_tag(component_name: &str) -> &'static str {
-    // Map component names to their actual tags
-    // TODO: This should be loaded from component manifests
-    match component_name {
-        "TitleSlide" => "cs-title-slide",
-        "TwoColSlide" => "cs-two-col-slide", 
-        "QuoteSlide" => "cs-quote-slide",
-        "CodeSlide" => "cs-code-slide",
-        "PollWidget" => "cs-poll",
-        _ => {
-            // Fallback to transformation for unknown components
-            // This should log a warning in a real implementation
-            match component_name.to_lowercase().as_str() {
-                name if name.contains("slide") => {
-                    if name == "titleslide" { "cs-title-slide" }
-                    else if name == "twocolslide" { "cs-two-col-slide" }
-                    else if name == "quoteslide" { "cs-quote-slide" }
-                    else if name == "codeslide" { "cs-code-slide" }
-                    else { "cs-unknown-slide" }
-                },
-                _ => "cs-unknown-component"
-            }
+fn resolve_component_tag(components: Option<&ComponentRegistry>, component_name: &str) -> String {
+    if let Some(registry) = components {
+        if let Some(manifest) = registry.components.get(component_name) {
+            return manifest.tag.clone();
         }
+        eprintln!("Warning: component '{}' not found in manifests; falling back to 'cs-unknown-component'", component_name);
+        return "cs-unknown-component".to_string();
     }
+    eprintln!("Warning: component registry not loaded; falling back to 'cs-unknown-component'");
+    "cs-unknown-component".to_string()
 }
 
-fn generate_slide_html(slide: &SlideDoc, config: &SanitizationConfig) -> anyhow::Result<String> {
-    let tag = get_component_tag(&slide.component.name);
+fn generate_slide_html(slide: &SlideDoc, components: Option<&ComponentRegistry>, config: &SanitizationConfig) -> anyhow::Result<String> {
+    let tag = resolve_component_tag(components, &slide.component.name);
+    let style_attr = if !slide.style_overrides.is_empty() {
+        let mut pairs: Vec<String> = slide
+            .style_overrides
+            .iter()
+            .map(|(k, v)| format!("{}: {}", k, v))
+            .collect();
+        pairs.sort();
+        format!(" style=\"{}\"", pairs.join("; "))
+    } else {
+        String::new()
+    };
     
     let html = format!(
-        r#"<div class="coolslides-slide" data-slide="{}">
+        r#"<div class="coolslides-slide" data-slide="{}"{}>
             <{} {}>{}</{}>
             {}
         </div>"#,
         slide.id,
+        style_attr,
         tag,
         format_props_as_data_id(&slide.id),
         format_slots(&slide.slots, config)?,
@@ -502,11 +561,16 @@ fn format_slots(
 }
 
 fn generate_export_html(
-    deck: &DeckManifest, 
+    deck: &DeckManifest,
     slides: &HashMap<String, SlideDoc>,
-    config: &SanitizationConfig
+    components: Option<&ComponentRegistry>,
+    deck_root: Option<&Path>,
+    config: &SanitizationConfig,
 ) -> anyhow::Result<String> {
-    let slides_html = generate_slides_html(deck, slides, config)?;
+    let slides_html = generate_slides_html(deck, slides, components, config)?;
+
+    let theme_css = inline_css(deck_root, &deck.theme);
+    let tokens_css = deck.tokens.as_ref().and_then(|p| inline_css(deck_root, p));
     
     let html = format!(r#"<!DOCTYPE html>
 <html lang="en">
@@ -514,7 +578,12 @@ fn generate_export_html(
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{}</title>
-    <link rel="stylesheet" href="{}">
+    <!-- Inlined Theme CSS -->
+    <style>
+        {}
+    </style>
+    <!-- Inlined Tokens CSS -->
+    {}
     <script type="module" src="/packages/runtime/dist/index.js"></script>
     <script type="module" src="/packages/components/dist/index.js"></script>
 </head>
@@ -533,13 +602,36 @@ fn generate_export_html(
 </body>
 </html>"#,
         deck.title,
-        deck.theme,
+        theme_css.unwrap_or_default(),
+        tokens_css.map(|c| format!("<style>\n{}\n</style>", c)).unwrap_or_default(),
         slides_html,
         serde_json::to_string_pretty(deck)?,
         serde_json::to_string_pretty(&slides.values().collect::<Vec<_>>())?
     );
 
     Ok(html)
+}
+
+fn inline_css(base: Option<&Path>, path_str: &str) -> Option<String> {
+    use std::fs;
+    let mut candidates: Vec<PathBuf> = Vec::new();
+    let p = PathBuf::from(path_str);
+    if p.is_absolute() {
+        candidates.push(p);
+    } else {
+        if let Some(b) = base {
+            candidates.push(b.join(path_str));
+        }
+        candidates.push(PathBuf::from(path_str));
+    }
+
+    for cand in candidates {
+        if let Ok(content) = fs::read_to_string(&cand) {
+            return Some(content);
+        }
+    }
+
+    None
 }
 
 fn html_escape(text: &str) -> String {
