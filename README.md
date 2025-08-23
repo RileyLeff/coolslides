@@ -62,6 +62,17 @@ All content is stored in a schema-validated JSON format:
 - **DeckManifest**: Overall presentation configuration and sequence
 - **Lockfile**: Resolved dependencies with integrity hashes
 
+### TOML Authoring
+
+For `slides.toml`, the `sequence` accepts ergonomic shorthand in addition to the canonical discriminated form. All inputs normalize to canonical JSON with `type`:
+
+- Ref (canonical): `type = "ref"`, `ref = "intro"`
+- Ref (shorthand): a plain string `"intro"` or a table `{ ref = "intro" }`
+- Group (canonical): `type = "group"`, `name = "Basics"`, `slides = ["a", "b"]`
+- Group (shorthand): a table `{ name = "Basics", slides = ["a", "b"] }` (optional `transition`)
+
+Mixing strings and tables in the `sequence` array is allowed in TOML; the runtime/dev APIs always emit the canonical JSON shape.
+
 ### Component System
 
 Components are Custom Elements with lifecycle management:

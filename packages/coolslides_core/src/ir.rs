@@ -160,7 +160,7 @@ pub struct PrintConfig {
 }
 
 /// DeckItem represents either a slide reference or a group
-#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[derive(Debug, Clone, Serialize, JsonSchema)]
 #[serde(tag = "type", rename_all = "camelCase")]
 pub enum DeckItem {
     /// Reference to a single slide
@@ -181,8 +181,94 @@ pub enum DeckItem {
     },
 }
 
-// TODO: Custom deserializer for DeckItem to support both tagged JSON and untagged TOML
-// For now, using standard tagged serialization - will add TOML compatibility later
+// Custom deserializer for DeckItem to support both tagged JSON and ergonomic TOML forms
+impl<'de> serde::Deserialize<'de> for DeckItem {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        use serde::Deserialize;
+
+        // Accepts multiple input shapes via untagged matching
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum DeckItemHelper {
+            // Shorthand: plain string -> ref
+            StringRef(String),
+            // Canonical ref: { type = "ref", ref = "..." }
+            CanonicalRef {
+                #[serde(rename = "type")]
+                r#type: TagRef,
+                #[serde(rename = "ref")]
+                r#ref: String,
+            },
+            // Canonical group: { type = "group", name = "...", slides = [...] }
+            CanonicalGroup {
+                #[serde(rename = "type")]
+                r#type: TagGroup,
+                name: String,
+                #[serde(default)]
+                transition: Option<String>,
+                slides: Vec<String>,
+            },
+            // Shorthand ref table: { ref = "..." }
+            RefTable {
+                #[serde(rename = "ref")]
+                r#ref: String,
+            },
+            // Shorthand group table: { name = "...", slides = [...] } (transition optional)
+            GroupTable {
+                name: Option<String>,
+                #[serde(default)]
+                transition: Option<String>,
+                slides: Vec<String>,
+            },
+        }
+
+        #[derive(Deserialize, Debug)]
+        #[serde(rename_all = "lowercase")]
+        enum TagRef {
+            Ref,
+        }
+
+        #[derive(Deserialize, Debug)]
+        #[serde(rename_all = "lowercase")]
+        enum TagGroup {
+            Group,
+        }
+
+        match DeckItemHelper::deserialize(deserializer)? {
+            DeckItemHelper::StringRef(s) => Ok(DeckItem::Ref { slide_id: s }),
+            DeckItemHelper::CanonicalRef { r#ref, .. } | DeckItemHelper::RefTable { r#ref } => {
+                Ok(DeckItem::Ref { slide_id: r#ref })
+            }
+            DeckItemHelper::CanonicalGroup {
+                name,
+                transition,
+                slides,
+                ..
+            } => Ok(DeckItem::Group {
+                name,
+                transition,
+                slides,
+            }),
+            DeckItemHelper::GroupTable {
+                name,
+                transition,
+                slides,
+            } => {
+                let name = name.ok_or_else(|| serde::de::Error::custom(
+                    "group item missing required field 'name'",
+                ))?;
+                Ok(DeckItem::Group {
+                    name,
+                    transition,
+                    slides,
+                })
+            }
+        }
+    }
+}
 
 /// Slot content that can be embedded in components
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
