@@ -1,0 +1,25 @@
+# Coolslides Example Deck Manifest
+
+modelVersion = "1.0"
+title = "Coolslides Example Presentation"
+theme = "themes/default/theme.css"
+tokens = "themes/default/tokens.css"
+
+plugins = []
+
+[transitions]
+default = "slide"
+
+[[sequence]]
+ref = "intro"
+
+[[sequence]]
+ref = "features"
+
+[[sequence]]
+ref = "quote-example"
+
+[notes]
+intro = "Welcome to Coolslides! This is an example presentation showcasing the basic components."
+features = "Here we demonstrate the two-column layout with some key features."
+quote-example = "A beautiful quote slide to demonstrate the quote component."

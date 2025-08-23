@@ -1,0 +1,18 @@
+# Quote Slide Example
+
+modelVersion = "1.0"
+id = "quote-example"
+
+[component]
+name = "QuoteSlide"
+versionReq = "^1"
+
+[props]
+quote = "The best way to predict the future is to implement it."
+author = "Alan Kay"
+attribution = "Computer Scientist"
+style = "default"
+
+[styleOverrides]
+"--quote-color" = "#333333"
+"--accent-color" = "#007acc"

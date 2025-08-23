@@ -1,0 +1,42 @@
+{
+  "name": "@coolslides/components",
+  "version": "0.1.0",
+  "description": "First-party slide components for Coolslides",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./slides/*": {
+      "import": "./dist/slides/*.js",
+      "types": "./dist/slides/*.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc && npm run build:manifests",
+    "build:manifests": "node scripts/generate-manifests.js",
+    "dev": "tsc --watch",
+    "lint": "eslint src/**/*.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@coolslides/component-sdk": "file:../component-sdk"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "eslint": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0"
+  },
+  "keywords": [
+    "slides",
+    "presentation",
+    "web-components",
+    "components"
+  ],
+  "author": "Coolslides Contributors",
+  "license": "MIT"
+}

@@ -1,0 +1,41 @@
+# Two Column Slide Example
+
+modelVersion = "1.0"
+id = "features"
+
+[component]
+name = "TwoColSlide"
+versionReq = "^1"
+
+[props]
+title = "Key Features"
+leftWidth = "60%"
+rightWidth = "40%"
+gap = "3rem"
+
+[slots.left]
+kind = "markdown"
+value = """
+## Developer-First
+- Schema-validated IR
+- Framework-agnostic components  
+- Hot reload development
+- Deterministic exports
+
+## Extensible
+- Capability-scoped plugins
+- Custom element architecture
+- Theming via CSS tokens
+"""
+
+[slots.right]
+kind = "markdown"
+value = """
+## Presentation Features
+- Speaker view with notes
+- Fragment animations
+- Auto-animate transitions
+- PDF export with handouts
+- Offline/strict modes
+- Accessibility built-in
+"""

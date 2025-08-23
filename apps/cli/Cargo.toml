@@ -1,0 +1,17 @@
+[package]
+name = "coolslides"
+version = "0.1.0"
+edition = "2021"
+description = "Coolslides CLI for pro-grade, hackable slide presentations"
+
+[[bin]]
+name = "coolslides"
+path = "src/main.rs"
+
+[dependencies]
+coolslides_core = { path = "../../packages/coolslides_core" }
+clap = { workspace = true }
+tokio = { workspace = true }
+anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

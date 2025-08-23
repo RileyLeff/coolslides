@@ -1,0 +1,54 @@
+{
+  "name": "@coolslides/runtime",
+  "version": "0.1.0",
+  "description": "Coolslides runtime with router, fragments, auto-animate, theming, and speaker view",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./router": {
+      "import": "./dist/router.js",
+      "types": "./dist/router.d.ts"
+    },
+    "./fragments": {
+      "import": "./dist/fragments.js",
+      "types": "./dist/fragments.d.ts"
+    },
+    "./auto-animate": {
+      "import": "./dist/auto-animate.js",
+      "types": "./dist/auto-animate.d.ts"
+    },
+    "./theming": {
+      "import": "./dist/theming.js",
+      "types": "./dist/theming.d.ts"
+    },
+    "./speaker-view": {
+      "import": "./dist/speaker-view.js",
+      "types": "./dist/speaker-view.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src/**/*.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "eslint": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0"
+  },
+  "keywords": [
+    "slides",
+    "presentation",
+    "web-components",
+    "runtime"
+  ],
+  "author": "Coolslides Contributors",
+  "license": "MIT"
+}

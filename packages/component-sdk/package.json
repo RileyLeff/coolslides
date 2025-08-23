@@ -1,0 +1,42 @@
+{
+  "name": "@coolslides/component-sdk",
+  "version": "0.1.0",
+  "description": "SDK and helpers for building Coolslides components",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./decorators": {
+      "import": "./dist/decorators.js",
+      "types": "./dist/decorators.d.ts"
+    },
+    "./base": {
+      "import": "./dist/base.js",
+      "types": "./dist/base.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "lint": "eslint src/**/*.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "eslint": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0"
+  },
+  "keywords": [
+    "slides",
+    "presentation",
+    "web-components",
+    "sdk"
+  ],
+  "author": "Coolslides Contributors",
+  "license": "MIT"
+}

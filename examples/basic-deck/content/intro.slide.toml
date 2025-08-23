@@ -1,0 +1,17 @@
+# Title Slide Example
+
+modelVersion = "1.0"
+id = "intro"
+
+[component]
+name = "TitleSlide"
+versionReq = "^1"
+
+[props]
+title = "Welcome to Coolslides"
+subtitle = "Pro-grade, hackable slide presentations"
+alignment = "center"
+
+[styleOverrides]
+"--title-color" = "#007acc"
+"--subtitle-color" = "#666666"

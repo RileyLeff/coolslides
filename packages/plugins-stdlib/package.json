@@ -1,0 +1,47 @@
+{
+  "name": "@coolslides/plugins-stdlib",
+  "version": "0.1.0",
+  "description": "Standard library of plugins for Coolslides",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./poll": {
+      "import": "./dist/poll/index.js",
+      "types": "./dist/poll/index.d.ts"
+    },
+    "./notes": {
+      "import": "./dist/notes/index.js",
+      "types": "./dist/notes/index.d.ts"
+    },
+    "./telemetry": {
+      "import": "./dist/telemetry/index.js",
+      "types": "./dist/telemetry/index.d.ts"
+    }
+  },
+  "scripts": {
+    "build": "tsc && npm run build:manifests",
+    "build:manifests": "node scripts/generate-manifests.js",
+    "dev": "tsc --watch",
+    "lint": "eslint src/**/*.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "eslint": "^8.0.0",
+    "@typescript-eslint/eslint-plugin": "^6.0.0",
+    "@typescript-eslint/parser": "^6.0.0"
+  },
+  "keywords": [
+    "slides",
+    "presentation",
+    "plugins",
+    "stdlib"
+  ],
+  "author": "Coolslides Contributors",
+  "license": "MIT"
+}

@@ -1,0 +1,411 @@
+/**
+ * Coolslides Default Theme
+ * Base styling and component theme application
+ */
+
+/* Import tokens */
+@import './tokens.css';
+
+/* Global reset and base styles */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: var(--font-family);
+  font-size: var(--font-size-base);
+  line-height: var(--line-height-normal);
+  color: var(--text-color);
+  background: var(--background-color);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Focus management */
+*:focus {
+  outline: 2px solid var(--accent-color);
+  outline-offset: 2px;
+}
+
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* Slide container base styles */
+.coolslides-presentation {
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  position: relative;
+}
+
+.coolslides-slide {
+  width: 100%;
+  height: 100%;
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+}
+
+.coolslides-slide[data-active] {
+  display: block;
+}
+
+/* Fragment animations */
+.fragment-hidden {
+  opacity: 0;
+  transform: translateY(1rem);
+  transition: opacity var(--duration-300) var(--ease-out), 
+              transform var(--duration-300) var(--ease-out);
+}
+
+.fragment-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.fragment-active {
+  /* Highlight styles for newly revealed fragments */
+}
+
+/* Slide transitions */
+.slide-transition-enter {
+  opacity: 0;
+  transform: translateX(100%);
+}
+
+.slide-transition-enter-active {
+  opacity: 1;
+  transform: translateX(0);
+  transition: opacity var(--duration-300) var(--ease-out),
+              transform var(--duration-300) var(--ease-out);
+}
+
+.slide-transition-exit {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.slide-transition-exit-active {
+  opacity: 0;
+  transform: translateX(-100%);
+  transition: opacity var(--duration-300) var(--ease-out),
+              transform var(--duration-300) var(--ease-out);
+}
+
+/* Component-specific theming */
+
+/* TitleSlide theming */
+cs-title-slide {
+  /* Token overrides are handled via CSS custom properties */
+}
+
+/* TwoColSlide theming */
+cs-two-col-slide {
+  /* Token overrides are handled via CSS custom properties */
+}
+
+/* QuoteSlide theming */
+cs-quote-slide {
+  /* Token overrides are handled via CSS custom properties */
+}
+
+/* Typography enhancements */
+h1, h2, h3, h4, h5, h6 {
+  margin: 0 0 1rem 0;
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--text-color);
+}
+
+h1 {
+  font-size: var(--font-size-4xl);
+}
+
+h2 {
+  font-size: var(--font-size-3xl);
+}
+
+h3 {
+  font-size: var(--font-size-2xl);
+}
+
+h4 {
+  font-size: var(--font-size-xl);
+}
+
+h5 {
+  font-size: var(--font-size-lg);
+}
+
+h6 {
+  font-size: var(--font-size-base);
+}
+
+p {
+  margin: 0 0 1rem 0;
+  color: var(--text-color);
+}
+
+a {
+  color: var(--accent-color);
+  text-decoration: underline;
+  text-underline-offset: 0.125em;
+}
+
+a:hover {
+  color: var(--color-primary-dark);
+}
+
+/* Lists */
+ul, ol {
+  margin: 0 0 1rem 0;
+  padding-left: 2rem;
+}
+
+li {
+  margin-bottom: 0.5rem;
+}
+
+li:last-child {
+  margin-bottom: 0;
+}
+
+/* Code styling */
+code {
+  font-family: var(--font-family-mono);
+  font-size: 0.875em;
+  background: var(--background-secondary);
+  padding: 0.125rem 0.25rem;
+  border-radius: var(--border-radius);
+}
+
+pre {
+  font-family: var(--font-family-mono);
+  background: var(--background-secondary);
+  padding: 1rem;
+  border-radius: var(--border-radius-lg);
+  overflow-x: auto;
+  margin: 0 0 1rem 0;
+}
+
+pre code {
+  background: none;
+  padding: 0;
+}
+
+/* Blockquotes */
+blockquote {
+  margin: 0 0 1rem 0;
+  padding-left: 1rem;
+  border-left: 4px solid var(--accent-color);
+  font-style: italic;
+  color: var(--text-secondary);
+}
+
+/* Tables */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0 0 1rem 0;
+}
+
+th, td {
+  padding: 0.75rem;
+  text-align: left;
+  border-bottom: 1px solid var(--color-gray-200);
+}
+
+th {
+  font-weight: var(--font-weight-semibold);
+  background: var(--background-secondary);
+}
+
+/* Utility classes */
+.text-center {
+  text-align: center;
+}
+
+.text-left {
+  text-align: left;
+}
+
+.text-right {
+  text-align: right;
+}
+
+.text-large {
+  font-size: var(--font-size-lg);
+}
+
+.text-small {
+  font-size: var(--font-size-sm);
+}
+
+.text-bold {
+  font-weight: var(--font-weight-bold);
+}
+
+.text-muted {
+  color: var(--text-muted);
+}
+
+.mb-0 { margin-bottom: 0; }
+.mb-1 { margin-bottom: var(--spacing-4); }
+.mb-2 { margin-bottom: var(--spacing-8); }
+.mb-3 { margin-bottom: var(--spacing-12); }
+
+.mt-0 { margin-top: 0; }
+.mt-1 { margin-top: var(--spacing-4); }
+.mt-2 { margin-top: var(--spacing-8); }
+.mt-3 { margin-top: var(--spacing-12); }
+
+/* Responsive design */
+@media (max-width: 768px) {
+  html {
+    font-size: 14px;
+  }
+  
+  h1 {
+    font-size: var(--font-size-3xl);
+  }
+  
+  h2 {
+    font-size: var(--font-size-2xl);
+  }
+  
+  h3 {
+    font-size: var(--font-size-xl);
+  }
+}
+
+/* Print styles */
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+  
+  .coolslides-slide {
+    position: static;
+    display: block !important;
+    page-break-after: always;
+    page-break-inside: avoid;
+  }
+  
+  .coolslides-slide:last-child {
+    page-break-after: avoid;
+  }
+  
+  .fragment-hidden {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Dark theme adjustments */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    --text-color: var(--color-gray-100);
+    --text-secondary: var(--color-gray-400);
+    --background-color: var(--color-gray-900);
+    --background-secondary: var(--color-gray-800);
+    --title-color: var(--color-white);
+    --subtitle-color: var(--color-gray-300);
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  .fragment-hidden,
+  .fragment-visible,
+  .slide-transition-enter-active,
+  .slide-transition-exit-active {
+    transition: opacity var(--duration-150) linear;
+    transform: none;
+  }
+  
+  .fragment-hidden {
+    opacity: 0;
+  }
+  
+  .fragment-visible {
+    opacity: 1;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  :root {
+    --accent-color: #0066cc;
+    --text-color: #000000;
+    --background-color: #ffffff;
+  }
+  
+  a {
+    text-decoration: underline;
+    text-underline-offset: 0.125em;
+  }
+  
+  code {
+    border: 1px solid currentColor;
+  }
+}
+
+/* Focus improvements for keyboard navigation */
+[tabindex="-1"]:focus {
+  outline: none;
+}
+
+.coolslides-slide:focus {
+  outline: none;
+}
+
+.keyboard-help-overlay {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--background-color);
+  color: var(--text-color);
+  padding: 2rem;
+  border-radius: var(--border-radius-lg);
+  box-shadow: var(--shadow-2xl);
+  z-index: var(--z-50);
+  max-width: 400px;
+  border: 1px solid var(--color-gray-200);
+}
+
+.keyboard-help-overlay h3 {
+  margin-top: 0;
+}
+
+.keyboard-help-overlay kbd {
+  background: var(--background-secondary);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--border-radius);
+  font-family: var(--font-family-mono);
+  font-size: 0.875rem;
+  border: 1px solid var(--color-gray-300);
+}
+
+.keyboard-help-overlay .help-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.keyboard-help-overlay .help-item:last-child {
+  margin-bottom: 0;
+}

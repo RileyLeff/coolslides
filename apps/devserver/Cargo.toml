@@ -1,0 +1,19 @@
+[package]
+name = "coolslides_server"
+version = "0.1.0"
+edition = "2021"
+description = "Development server for Coolslides with WebSocket rooms and export harness"
+
+[dependencies]
+coolslides_core = { path = "../../packages/coolslides_core" }
+axum = { workspace = true, features = ["ws"] }
+tokio = { workspace = true }
+tower = { workspace = true }
+tower-http = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+uuid = { workspace = true }
+anyhow = { workspace = true }
+chrono = { version = "0.4", features = ["serde"] }
+tracing-subscriber = "0.3"
+tempfile = "3.8"
