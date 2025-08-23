@@ -276,6 +276,21 @@ impl RoomManager {
         room_id
     }
 
+    pub async fn ensure_room(&self, room_id: String) -> String {
+        // Check if room already exists
+        if self.get_room(&room_id).await.is_some() {
+            return room_id;
+        }
+        
+        // Create room with the provided ID
+        let room = Room::new(room_id.clone());
+        
+        let mut rooms = self.rooms.write().await;
+        rooms.insert(room_id.clone(), room);
+        
+        room_id
+    }
+
     pub async fn get_room(&self, room_id: &str) -> Option<Room> {
         let rooms = self.rooms.read().await;
         rooms.get(room_id).cloned()

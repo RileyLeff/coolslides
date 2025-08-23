@@ -160,10 +160,9 @@ pub struct PrintConfig {
 
 /// DeckItem represents either a slide reference or a group
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[serde(untagged)]
 pub enum DeckItem {
     /// Reference to a single slide
-    #[serde(rename = "ref")]
     Ref { 
         /// Slide ID to reference
         #[serde(rename = "ref")]

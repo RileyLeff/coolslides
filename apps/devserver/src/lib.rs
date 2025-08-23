@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Path, Query, State, WebSocketUpgrade},
+    extract::{Path as AxumPath, State, WebSocketUpgrade},
     http::{StatusCode, header},
     response::{Html, Json, Response},
     routing::{get, post},
@@ -7,10 +7,12 @@ use axum::{
     body::Body,
 };
 use coolslides_core::{DeckManifest, SlideDoc};
-use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, sync::Arc};
+use serde::Deserialize;
+use std::{collections::HashMap, path::Path, sync::Arc};
 use tokio::sync::RwLock;
 use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
+use tokio::fs;
+use pulldown_cmark::{Parser, html};
 
 pub mod export;
 pub mod rooms;
@@ -31,6 +33,77 @@ impl AppState {
             slides: Arc::new(RwLock::new(HashMap::new())),
         }
     }
+
+    /// Load deck manifest and slides from filesystem
+    pub async fn load_from_directory(&self, deck_dir: impl AsRef<Path>) -> anyhow::Result<()> {
+        let deck_dir = deck_dir.as_ref();
+        
+        // Load deck manifest from slides.toml
+        let manifest_path = deck_dir.join("slides.toml");
+        if !manifest_path.exists() {
+            return Err(anyhow::anyhow!("No slides.toml found in {:?}", deck_dir));
+        }
+        
+        let manifest_content = fs::read_to_string(&manifest_path).await?;
+        let deck_manifest: DeckManifest = toml::from_str(&manifest_content)?;
+        
+        // Load all slide files from content/ directory
+        let content_dir = deck_dir.join("content");
+        let mut slides_map = HashMap::new();
+        
+        if content_dir.exists() {
+            let mut entries = fs::read_dir(&content_dir).await?;
+            while let Some(entry) = entries.next_entry().await? {
+                let path = entry.path();
+                if path.extension().and_then(|s| s.to_str()) == Some("toml") 
+                    && path.file_stem().and_then(|s| s.to_str()).map(|s| s.ends_with(".slide")).unwrap_or(false) {
+                    
+                    let slide_content = fs::read_to_string(&path).await?;
+                    let slide_doc: SlideDoc = toml::from_str(&slide_content)?;
+                    
+                    slides_map.insert(slide_doc.id.clone(), slide_doc);
+                }
+            }
+        }
+        
+        // Update AppState
+        {
+            let mut deck = self.deck.write().await;
+            *deck = Some(deck_manifest);
+        }
+        
+        let slide_count = slides_map.len();
+        
+        {
+            let mut slides = self.slides.write().await;
+            *slides = slides_map;
+        }
+        
+        println!("Loaded deck manifest and {} slides", slide_count);
+        Ok(())
+    }
+    
+    /// Watch for file changes and reload
+    pub async fn start_file_watcher(&self, deck_dir: impl AsRef<Path>) -> anyhow::Result<()> {
+        use tokio::time::{sleep, Duration};
+        
+        let deck_dir = deck_dir.as_ref().to_path_buf();
+        let state = self.clone();
+        
+        tokio::spawn(async move {
+            loop {
+                sleep(Duration::from_secs(2)).await;
+                
+                // Simple polling-based file watcher for now
+                // In production, use a proper file watcher like notify
+                if let Err(e) = state.load_from_directory(&deck_dir).await {
+                    eprintln!("Failed to reload files: {}", e);
+                }
+            }
+        });
+        
+        Ok(())
+    }
 }
 
 /// Create the Axum router for the dev server
@@ -44,6 +117,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/rooms/:room_id/dump", get(get_room_dump))
         .route("/api/export/pdf", post(export_pdf))
         .route("/api/export/html", post(export_html))
+        .route("/api/importmap", get(get_import_map))
         .route("/healthz", get(health_check))
         
         // WebSocket routes
@@ -55,6 +129,9 @@ pub fn create_router(state: AppState) -> Router {
         
         // Static files
         .nest_service("/static", ServeDir::new("static"))
+        .nest_service("/packages/runtime/dist", ServeDir::new("packages/runtime/dist"))
+        .nest_service("/packages/components/dist", ServeDir::new("packages/components/dist"))
+        .nest_service("/themes", ServeDir::new("themes"))
         
         .layer(CorsLayer::permissive())
         .layer(TraceLayer::new_for_http())
@@ -64,6 +141,20 @@ pub fn create_router(state: AppState) -> Router {
 /// Health check endpoint
 async fn health_check() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "ok": true }))
+}
+
+/// Get import map for package resolution
+async fn get_import_map() -> Json<serde_json::Value> {
+    let import_map = serde_json::json!({
+        "imports": {
+            "@coolslides/runtime": "/packages/runtime/dist/index.js",
+            "@coolslides/component-sdk": "/packages/component-sdk/dist/index.js",
+            "@coolslides/components": "/packages/components/dist/index.js",
+            "@coolslides/plugins-stdlib": "/packages/plugins-stdlib/dist/index.js"
+        }
+    });
+    
+    Json(import_map)
 }
 
 /// Get the resolved deck manifest
@@ -78,7 +169,7 @@ async fn get_deck(State(state): State<AppState>) -> Result<Json<DeckManifest>, S
 /// Get a specific slide
 async fn get_slide(
     State(state): State<AppState>,
-    Path(id): Path<String>,
+    AxumPath(id): AxumPath<String>,
 ) -> Result<Json<SlideDoc>, StatusCode> {
     let slides = state.slides.read().await;
     match slides.get(&id) {
@@ -89,7 +180,7 @@ async fn get_slide(
 
 /// Start recording a room
 async fn start_recording(
-    Path(room_id): Path<String>,
+    AxumPath(room_id): AxumPath<String>,
     State(state): State<AppState>,
 ) -> StatusCode {
     if let Some(room) = state.room_manager.get_room(&room_id).await {
@@ -102,7 +193,7 @@ async fn start_recording(
 
 /// Stop recording a room
 async fn stop_recording(
-    Path(room_id): Path<String>,
+    AxumPath(room_id): AxumPath<String>,
     State(state): State<AppState>,
 ) -> StatusCode {
     if let Some(room) = state.room_manager.get_room(&room_id).await {
@@ -115,7 +206,7 @@ async fn stop_recording(
 
 /// Get room message dump
 async fn get_room_dump(
-    Path(room_id): Path<String>,
+    AxumPath(room_id): AxumPath<String>,
     State(state): State<AppState>,
 ) -> Result<String, StatusCode> {
     if let Some(room) = state.room_manager.get_room(&room_id).await {
@@ -227,18 +318,44 @@ fn generate_slides_html(deck: &DeckManifest, slides: &HashMap<String, SlideDoc>)
     Ok(html_parts.join("\n"))
 }
 
+fn get_component_tag(component_name: &str) -> &'static str {
+    // Map component names to their actual tags
+    // TODO: This should be loaded from component manifests
+    match component_name {
+        "TitleSlide" => "cs-title-slide",
+        "TwoColSlide" => "cs-two-col-slide", 
+        "QuoteSlide" => "cs-quote-slide",
+        "CodeSlide" => "cs-code-slide",
+        "PollWidget" => "cs-poll",
+        _ => {
+            // Fallback to transformation for unknown components
+            // This should log a warning in a real implementation
+            match component_name.to_lowercase().as_str() {
+                name if name.contains("slide") => {
+                    if name == "titleslide" { "cs-title-slide" }
+                    else if name == "twocolslide" { "cs-two-col-slide" }
+                    else if name == "quoteslide" { "cs-quote-slide" }
+                    else if name == "codeslide" { "cs-code-slide" }
+                    else { "cs-unknown-slide" }
+                },
+                _ => "cs-unknown-component"
+            }
+        }
+    }
+}
+
 fn generate_slide_html(slide: &SlideDoc) -> anyhow::Result<String> {
-    // Generate basic slide HTML structure
-    // This is simplified - in a real implementation, we'd render the actual components
+    let tag = get_component_tag(&slide.component.name);
+    
     let html = format!(
         r#"<div class="coolslides-slide" data-slide="{}">
             <{} {}>{}</{}>
         </div>"#,
         slide.id,
-        format!("cs-{}", slide.component.name.to_lowercase().replace("slide", "-slide")),
+        tag,
         format_props(&slide.props)?,
         format_slots(&slide.slots)?,
-        format!("cs-{}", slide.component.name.to_lowercase().replace("slide", "-slide"))
+        tag
     );
 
     Ok(html)
@@ -261,12 +378,20 @@ fn format_props(props: &serde_json::Value) -> anyhow::Result<String> {
     }
 }
 
+fn render_markdown_to_html(markdown: &str) -> String {
+    let parser = Parser::new(markdown);
+    let mut html_output = String::new();
+    html::push_html(&mut html_output, parser);
+    html_output
+}
+
 fn format_slots(slots: &HashMap<String, coolslides_core::Slot>) -> anyhow::Result<String> {
     let slot_content: Vec<String> = slots.iter()
         .map(|(name, slot)| {
             match slot {
                 coolslides_core::Slot::Markdown { value } => {
-                    format!(r#"<div slot="{}">{}</div>"#, name, html_escape(value))
+                    let rendered_html = render_markdown_to_html(value);
+                    format!(r#"<div slot="{}">{}</div>"#, name, rendered_html)
                 }
                 coolslides_core::Slot::Component { tag, props, .. } => {
                     format!(r#"<{} slot="{}" {}></{tag}>"#, tag, name, format_props(props).unwrap_or_default())
@@ -326,13 +451,11 @@ fn html_escape(text: &str) -> String {
 /// WebSocket handler for rooms
 async fn websocket_handler(
     ws: WebSocketUpgrade,
-    Path(room_id): Path<String>,
+    AxumPath(room_id): AxumPath<String>,
     State(state): State<AppState>,
 ) -> axum::response::Response {
-    // Create room if it doesn't exist
-    if state.room_manager.get_room(&room_id).await.is_none() {
-        let _ = state.room_manager.create_room().await;
-    }
+    // Ensure room exists with the provided room_id
+    let _ = state.room_manager.ensure_room(room_id.clone()).await;
     
     let room_manager = state.room_manager.clone();
     ws.on_upgrade(move |socket| {
@@ -378,14 +501,33 @@ async fn audience_ui() -> Html<&'static str> {
     "#)
 }
 
-/// Start the development server
-pub async fn start_server(host: &str, port: u16) -> anyhow::Result<()> {
+/// Start the development server with directory
+pub async fn start_server_with_dir(host: &str, port: u16, deck_dir: Option<&str>) -> anyhow::Result<()> {
     let state = AppState::new();
+    
+    // Load deck from directory (default to current directory)
+    let deck_path = deck_dir.unwrap_or(".");
+    if let Err(e) = state.load_from_directory(deck_path).await {
+        println!("Warning: Failed to load deck from {}: {}", deck_path, e);
+        println!("Server will start but /api/deck and /api/slide endpoints will return 404");
+    }
+    
+    // Start file watcher for hot reloading
+    if let Err(e) = state.start_file_watcher(deck_path).await {
+        println!("Warning: Failed to start file watcher: {}", e);
+    }
+    
     let app = create_router(state);
     
     let listener = tokio::net::TcpListener::bind(format!("{}:{}", host, port)).await?;
     println!("Coolslides dev server running on http://{}:{}", host, port);
+    println!("Serving deck from: {}", std::fs::canonicalize(deck_path).unwrap_or_else(|_| deck_path.into()).display());
     
     axum::serve(listener, app).await?;
     Ok(())
+}
+
+/// Start the development server
+pub async fn start_server(host: &str, port: u16) -> anyhow::Result<()> {
+    start_server_with_dir(host, port, None).await
 }

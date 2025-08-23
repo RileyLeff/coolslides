@@ -10,7 +10,10 @@
       "Bash(tsc:*)",
       "Bash(npm install:*)",
       "Bash(cargo:*)",
-      "Bash(npm run typecheck:*)"
+      "Bash(npm run typecheck:*)",
+      "Bash(../../target/debug/coolslides dev:*)",
+      "Bash(timeout:*)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

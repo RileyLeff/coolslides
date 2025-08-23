@@ -108,6 +108,14 @@ Tests: unit tests for IR parse/validate, auto‑animate reduced motion path, and
 Questions/decisions to lock
 
 Do you want to keep “vanilla CE” as the default component authoring path and add Svelte later, or switch default to Svelte→CE now?
+
+RILEY INPUT: I think keep vanilla CE for now and worry about svelte and other frameworks later
+
 Import map vs bundling: for export, do you prefer an import map + loose files (simple), or a single bundled runtime/components file per deck (heavier build but fewer moving parts)?
+
+RILEY INPUT: heavier single bundle preferred but open to other suggestions if it makes it easier
+
 Where should decks read from by default in dev? CWD, or an explicit --project flag?
-If you want, I can turn the “Top priority gaps” into specific PR checklists (files to touch, signatures to add), or produce a minimal file watcher for devserver that hot-reloads slides.toml and content/*.slide.toml.
+
+RILEY INPUT: i think CWD by default is fine 
+

@@ -135,12 +135,19 @@ async fn main() -> Result<()> {
             println!("Creating new slide: {} with ID: {}", component_name, id);
             // TODO: Implement new command
         }
-        Commands::Dev { open, port, host, strict, seed } => {
+        Commands::Dev { open: _, port, host, strict: _, seed: _ } => {
             println!("Starting dev server on {}:{}", host, port);
-            if strict {
-                println!("Strict mode enabled");
+            
+            // Start the development server
+            match coolslides_server::start_server(&host, port).await {
+                Ok(()) => {
+                    println!("Server stopped successfully");
+                }
+                Err(e) => {
+                    eprintln!("Error starting server: {}", e);
+                    std::process::exit(1);
+                }
             }
-            // TODO: Implement dev command - start devserver
         }
         Commands::Validate { format, strict } => {
             println!("Validating slide deck (format: {})", format);
