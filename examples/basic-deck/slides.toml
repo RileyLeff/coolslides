@@ -11,12 +11,15 @@ plugins = []
 default = "slide"
 
 [[sequence]]
+type = "ref"
 ref = "intro"
 
 [[sequence]]
+type = "ref"
 ref = "features"
 
 [[sequence]]
+type = "ref"
 ref = "quote-example"
 
 [notes]

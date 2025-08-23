@@ -8,6 +8,8 @@ export * from './fragments.js';
 export * from './auto-animate.js';
 export * from './theming.js';
 export * from './speaker-view.js';
+export * from './props.js';
+export * from './module-loader.js';
 export * from './types.js';
 
 // Initialize runtime when imported

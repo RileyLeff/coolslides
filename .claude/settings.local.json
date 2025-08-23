@@ -17,7 +17,9 @@
       "Bash(git commit:*)",
       "Bash(../../target/debug/coolslides validate:*)",
       "Bash(target/debug/coolslides validate:*)",
-      "Bash(curl:*)"
+      "Bash(curl:*)",
+      "Read(//tmp/**)",
+      "Read(//private/tmp/**)"
     ],
     "deny": [],
     "ask": []

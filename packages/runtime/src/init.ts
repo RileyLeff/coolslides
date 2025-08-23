@@ -4,10 +4,11 @@
 
 import { SimpleEventBus } from './event-bus.js';
 import { SlideRouter } from './router.js';
-import { DefaultFragmentManager } from './fragments.js';
 import { FLIPAutoAnimateManager } from './auto-animate.js';
 import { CSSCustomPropertyThemeManager } from './theming.js';
 import { DefaultSpeakerView } from './speaker-view.js';
+import { RuntimePropertyManager } from './props.js';
+import { DynamicModuleLoader } from './module-loader.js';
 import { RuntimeContext, DeckManifest, SlideDoc } from './types.js';
 
 let initialized = false;
@@ -54,8 +55,6 @@ export async function init(deck?: DeckManifest, slides?: SlideDoc[]): Promise<Ru
   const router = new SlideRouter(context, bus);
   context.router = router;
 
-  const fragmentManager = new DefaultFragmentManager(bus);
-  fragmentManager.initialize();
 
   const autoAnimateManager = new FLIPAutoAnimateManager(bus);
   autoAnimateManager.initialize();
@@ -64,6 +63,18 @@ export async function init(deck?: DeckManifest, slides?: SlideDoc[]): Promise<Ru
   themeManager.initialize();
 
   const speakerView = new DefaultSpeakerView(context, bus);
+
+  const propertyManager = new RuntimePropertyManager(bus);
+  propertyManager.initialize();
+
+  // Initialize module loader for dynamic components
+  const moduleLoader = new DynamicModuleLoader(bus, {
+    basePath: window.location.origin,
+    importMap: await loadImportMap()
+  });
+  
+  // Preload any existing slot components
+  await moduleLoader.preloadAllSlotComponents();
 
   // Load theme and tokens
   if (deckData.theme) {
@@ -137,6 +148,31 @@ async function loadDeckData(): Promise<{ deck: DeckManifest; slides: SlideDoc[] 
   }
 
   throw new Error('Could not load deck data from dev server or static sources');
+}
+
+async function loadImportMap(): Promise<Record<string, string>> {
+  try {
+    const response = await fetch('/api/importmap');
+    if (response.ok) {
+      const data = await response.json();
+      return data.imports || {};
+    }
+  } catch (error) {
+    console.debug('Could not load import map from server');
+  }
+  
+  // Fallback to embedded import map
+  const importMapElement = document.querySelector('script[type="importmap"]');
+  if (importMapElement && importMapElement.textContent) {
+    try {
+      const importMap = JSON.parse(importMapElement.textContent);
+      return importMap.imports || {};
+    } catch (error) {
+      console.warn('Failed to parse embedded import map');
+    }
+  }
+  
+  return {};
 }
 
 function setupGlobalKeyboardShortcuts(bus: SimpleEventBus, speakerView: DefaultSpeakerView): void {

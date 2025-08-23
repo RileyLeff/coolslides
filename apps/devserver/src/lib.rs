@@ -397,32 +397,30 @@ fn generate_slide_html(slide: &SlideDoc, config: &SanitizationConfig) -> anyhow:
     let html = format!(
         r#"<div class="coolslides-slide" data-slide="{}">
             <{} {}>{}</{}>
+            {}
         </div>"#,
         slide.id,
         tag,
-        format_props(&slide.props)?,
+        format_props_as_data_id(&slide.id),
         format_slots(&slide.slots, config)?,
-        tag
+        tag,
+        generate_props_script(&slide.id, &slide.props)?
     );
 
     Ok(html)
 }
 
-fn format_props(props: &serde_json::Value) -> anyhow::Result<String> {
-    if let Some(obj) = props.as_object() {
-        let attrs: Vec<String> = obj.iter()
-            .map(|(key, value)| {
-                let value_str = match value {
-                    serde_json::Value::String(s) => s.clone(),
-                    _ => value.to_string().trim_matches('"').to_string(),
-                };
-                format!("{}=\"{}\"", key, html_escape(&value_str))
-            })
-            .collect();
-        Ok(attrs.join(" "))
-    } else {
-        Ok(String::new())
-    }
+fn format_props_as_data_id(slide_id: &str) -> String {
+    format!("data-props-id=\"{}\"", slide_id)
+}
+
+fn generate_props_script(slide_id: &str, props: &serde_json::Value) -> anyhow::Result<String> {
+    let props_json = serde_json::to_string(props)?;
+    Ok(format!(
+        r#"<script type="application/json" data-props="{}">{}</script>"#,
+        slide_id,
+        props_json
+    ))
 }
 
 fn render_markdown_to_html(markdown: &str, config: &SanitizationConfig) -> String {
@@ -480,8 +478,21 @@ fn format_slots(
                     let rendered_html = render_markdown_to_html(value, config);
                     format!(r#"<div slot="{}">{}</div>"#, name, rendered_html)
                 }
-                coolslides_core::Slot::Component { tag, props, .. } => {
-                    format!(r#"<{} slot="{}" {}></{tag}>"#, tag, name, format_props(props).unwrap_or_default())
+                coolslides_core::Slot::Component { tag, module, props, defer, .. } => {
+                    let slot_id = format!("{}:{}", name, tag);
+                    let props_script = generate_props_script(&slot_id, props).unwrap_or_default();
+                    let defer_attr = defer.as_ref().map(|d| format!(" data-defer=\"{}\"", 
+                        match d {
+                            coolslides_core::DeferStrategy::Eager => "eager",
+                            coolslides_core::DeferStrategy::Visible => "visible", 
+                            coolslides_core::DeferStrategy::Idle => "idle",
+                        }
+                    )).unwrap_or_default();
+                    
+                    format!(
+                        r#"<{} slot="{}" data-props-id="{}" data-slot-component data-module="{}"{}>{}</{tag}>"#, 
+                        tag, name, slot_id, module, defer_attr, props_script
+                    )
                 }
             }
         })

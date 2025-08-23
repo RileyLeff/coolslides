@@ -161,7 +161,7 @@ pub struct PrintConfig {
 
 /// DeckItem represents either a slide reference or a group
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(untagged)]
+#[serde(tag = "type", rename_all = "camelCase")]
 pub enum DeckItem {
     /// Reference to a single slide
     Ref { 
@@ -180,6 +180,9 @@ pub enum DeckItem {
         slides: Vec<String>,
     },
 }
+
+// TODO: Custom deserializer for DeckItem to support both tagged JSON and untagged TOML
+// For now, using standard tagged serialization - will add TOML compatibility later
 
 /// Slot content that can be embedded in components
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]

@@ -4,6 +4,7 @@
  */
 
 import { EventBus, Router, RuntimeContext, SlideEnterEvent, SlideLeaveEvent } from './types.js';
+import { DefaultFragmentManager } from './fragments.js';
 
 export class SlideRouter implements Router {
   private context: RuntimeContext;
@@ -11,10 +12,12 @@ export class SlideRouter implements Router {
   private currentSlideId: string | null = null;
   private currentFragment: number = 0;
   private slideSequence: string[] = [];
+  private fragmentManager: DefaultFragmentManager;
 
   constructor(context: RuntimeContext, bus: EventBus) {
     this.context = context;
     this.bus = bus;
+    this.fragmentManager = new DefaultFragmentManager(bus);
     this.buildSlideSequence();
     this.setupEventListeners();
     this.loadFromHash();
@@ -222,46 +225,32 @@ export class SlideRouter implements Router {
     return false;
   }
 
-  private getSlideFragmentCount(_slideId: string): number {
-    // TODO: Calculate fragment count based on slide content
-    // For now, assume each slide has at least 1 fragment
-    return 1;
+  private getSlideFragmentCount(slideId: string): number {
+    const slideElement = document.querySelector(`[data-slide="${slideId}"]`) as HTMLElement;
+    if (!slideElement) {
+      return 1; // Default if slide not found
+    }
+    return this.fragmentManager.getFragmentCount(slideElement);
   }
 
   private updateSlideDisplay(): void {
     if (!this.currentSlideId) return;
 
-    // Hide all slides
+    // Remove active state from all slides
     document.querySelectorAll('[data-slide]').forEach(slide => {
-      (slide as HTMLElement).style.display = 'none';
+      slide.removeAttribute('data-active');
     });
 
-    // Show current slide
+    // Set current slide as active
     const currentSlideEl = document.querySelector(`[data-slide="${this.currentSlideId}"]`);
     if (currentSlideEl) {
-      (currentSlideEl as HTMLElement).style.display = 'block';
+      currentSlideEl.setAttribute('data-active', '');
       
-      // Handle fragments
-      this.updateFragments(currentSlideEl as HTMLElement);
+      // Handle fragments using the fragment manager
+      this.fragmentManager.updateFragments(currentSlideEl as HTMLElement, this.currentFragment);
     }
   }
 
-  private updateFragments(slideElement: HTMLElement): void {
-    const fragments = slideElement.querySelectorAll('[data-fragment]');
-    
-    fragments.forEach((fragment, index) => {
-      const fragmentEl = fragment as HTMLElement;
-      const isVisible = index <= this.currentFragment;
-      
-      if (isVisible) {
-        fragmentEl.classList.add('fragment-visible');
-        fragmentEl.classList.remove('fragment-hidden');
-      } else {
-        fragmentEl.classList.add('fragment-hidden');
-        fragmentEl.classList.remove('fragment-visible');
-      }
-    });
-  }
 
   private showKeyboardHelp(): void {
     this.bus.emit('keyboard:help');
