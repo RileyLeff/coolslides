@@ -1,5 +1,6 @@
 use clap::{Parser, Subcommand};
 use coolslides_core::{DeckManifest, SlideDoc, ComponentRegistry, components, validation};
+use std::path::Path;
 use anyhow::Result;
 
 #[derive(Parser)]
@@ -184,9 +185,100 @@ async fn main() -> Result<()> {
             match format {
                 ExportFormat::Html { dir, strict } => {
                     println!("Exporting to HTML: {}", dir);
+                    // Generate HTML using server helpers
+                    let out_dir = Path::new(&dir);
+                    let cwd = Path::new(".");
+                    match coolslides_server::export_deck_html_from_dir(cwd, strict) {
+                        Ok(mut html) => {
+                            // Inject import map for offline usage and rewrite /packages to ./packages
+                            let import_map = serde_json::json!({
+                                "imports": {
+                                    "@coolslides/runtime": "./packages/runtime/dist/index.js",
+                                    "@coolslides/components": "./packages/components/dist/index.js",
+                                    "@coolslides/component-sdk": "./packages/component-sdk/dist/index.js",
+                                    "@coolslides/plugins-stdlib": "./packages/plugins-stdlib/dist/index.js"
+                                }
+                            });
+                            let import_map_tag = format!(
+                                "<script type=\"importmap\">{}</script>",
+                                serde_json::to_string(&import_map).unwrap()
+                            );
+                            html = html.replace(
+                                "<title>",
+                                &format!("{}<title>", import_map_tag)
+                            );
+                            html = html.replace("/packages/", "./packages/");
+                            html = html.replace("data-module=\"/packages/", "data-module=\"./packages/");
+
+                            // Write index.html
+                            std::fs::create_dir_all(out_dir).ok();
+                            let index_path = out_dir.join("index.html");
+                            if let Err(e) = std::fs::write(&index_path, html) {
+                                eprintln!("Failed to write {}: {}", index_path.display(), e);
+                                std::process::exit(1);
+                            }
+
+                            // Copy package dists for offline use
+                            let to_copy = [
+                                (Path::new("packages/runtime/dist"), out_dir.join("packages/runtime/dist")),
+                                (Path::new("packages/components/dist"), out_dir.join("packages/components/dist")),
+                                (Path::new("packages/component-sdk/dist"), out_dir.join("packages/component-sdk/dist")),
+                                (Path::new("packages/plugins-stdlib/dist"), out_dir.join("packages/plugins-stdlib/dist")),
+                            ];
+                            for (src, dst) in to_copy {
+                                if let Err(e) = copy_dir_all(src, &dst) {
+                                    eprintln!("Warning: failed to copy {} -> {}: {}", src.display(), dst.display(), e);
+                                }
+                            }
+
+                            println!("✓ HTML export written to {}", index_path.display());
+                        }
+                        Err(e) => {
+                            eprintln!("Error generating HTML: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
                 }
                 ExportFormat::Pdf { file, profile, scale, timeout } => {
                     println!("Exporting to PDF: {} (profile: {}, scale: {})", file, profile, scale);
+                    // Load deck and slides, generate slides HTML, then render PDF
+                    let cwd = Path::new(".");
+                    let (deck, slides, registry) = match coolslides_server::load_deck_bundle(cwd) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            eprintln!("Failed to load deck: {}", e);
+                            std::process::exit(1);
+                        }
+                    };
+                    let slides_html = match coolslides_server::render_slides_html(&deck, &slides, registry.as_ref(), &coolslides_server::SanitizationConfig::new(false)) {
+                        Ok(v) => v,
+                        Err(e) => {
+                            eprintln!("Failed to generate slides HTML: {}", e);
+                            std::process::exit(1);
+                        }
+                    };
+                    let export_config = coolslides_server::export::ExportConfig {
+                        profile: match profile.as_str() {
+                            "archival" => coolslides_server::export::ExportProfile::Archival,
+                            _ => coolslides_server::export::ExportProfile::Handout,
+                        },
+                        scale,
+                        timeout,
+                        output_path: file.clone(),
+                    };
+                    match coolslides_server::export::export_deck_to_pdf(&deck, &slides_html, export_config, Some(cwd)) .await {
+                        Ok(bytes) => {
+                            if let Err(e) = std::fs::write(&file, bytes) {
+                                eprintln!("Failed to write PDF {}: {}", file, e);
+                                std::process::exit(1);
+                            }
+                            println!("✓ PDF export written to {}", file);
+                        }
+                        Err(e) => {
+                            eprintln!("Error exporting PDF: {}", e);
+                            std::process::exit(1);
+                        }
+                    }
                 }
             }
             // TODO: Implement export
@@ -330,4 +422,23 @@ fn extract_slide_id_from_error(error: &validation::ValidationError) -> Option<St
         ValidationError::MissingRequiredProp { slide_id, .. } => Some(slide_id.clone()),
         _ => None,
     }
+}
+
+fn copy_dir_all(src: &Path, dst: &Path) -> std::io::Result<()> {
+    use std::fs;
+    if !src.exists() { return Ok(()); }
+    fs::create_dir_all(dst)?;
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            copy_dir_all(&entry.path(), &dst.join(entry.file_name()))?;
+        } else if ty.is_file() {
+            let to = dst.join(entry.file_name());
+            // Ensure parent exists
+            if let Some(parent) = to.parent() { fs::create_dir_all(parent)?; }
+            fs::copy(entry.path(), to)?;
+        }
+    }
+    Ok(())
 }

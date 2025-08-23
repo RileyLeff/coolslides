@@ -204,6 +204,58 @@ pub fn create_router(state: AppState) -> Router {
         .with_state(state)
 }
 
+/// Load deck + slides + component registry from a directory (utility for CLI/exports)
+pub fn load_deck_bundle(deck_dir: &std::path::Path) -> anyhow::Result<(
+    DeckManifest,
+    HashMap<String, SlideDoc>,
+    Option<ComponentRegistry>,
+)> {
+    use std::fs;
+    // Manifest
+    let manifest_path = deck_dir.join("slides.toml");
+    let manifest_content = fs::read_to_string(&manifest_path)?;
+    let deck_manifest: DeckManifest = toml::from_str(&manifest_content)?;
+
+    // Slides
+    let mut slides_map = HashMap::new();
+    let content_dir = deck_dir.join("content");
+    if content_dir.exists() {
+        for entry in std::fs::read_dir(&content_dir)? {
+            let path = entry?.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("toml")
+                && path
+                    .file_stem()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.ends_with(".slide"))
+                    .unwrap_or(false)
+            {
+                let slide_content = fs::read_to_string(&path)?;
+                let slide_doc: SlideDoc = toml::from_str(&slide_content)?;
+                slides_map.insert(slide_doc.id.clone(), slide_doc);
+            }
+        }
+    }
+
+    // Components registry
+    let possible_components_paths = [
+        std::path::Path::new("packages/components/src"),       // From project root
+        std::path::Path::new("../../packages/components/src"), // From examples/basic-deck
+        std::path::Path::new("../packages/components/src"),    // From apps/devserver
+    ];
+    let registry = possible_components_paths
+        .iter()
+        .find(|path| path.exists())
+        .and_then(|components_dir| components::extract_manifests_from_directory(components_dir).ok());
+
+    Ok((deck_manifest, slides_map, registry))
+}
+
+/// Generate full export HTML for a deck directory
+pub fn export_deck_html_from_dir(deck_dir: &std::path::Path, strict_mode: bool) -> anyhow::Result<String> {
+    let (deck, slides, registry) = load_deck_bundle(deck_dir)?;
+    generate_export_html(&deck, &slides, registry.as_ref(), Some(deck_dir), &SanitizationConfig::new(strict_mode))
+}
+
 /// Health check endpoint
 async fn health_check() -> Json<serde_json::Value> {
     Json(serde_json::json!({ "ok": true }))
@@ -424,6 +476,16 @@ fn generate_slides_html(
     }
 
     Ok(html_parts.join("\n"))
+}
+
+/// Public wrapper to generate slides HTML for PDF export and tooling
+pub fn render_slides_html(
+    deck: &DeckManifest,
+    slides: &HashMap<String, SlideDoc>,
+    components: Option<&ComponentRegistry>,
+    config: &SanitizationConfig,
+) -> anyhow::Result<String> {
+    generate_slides_html(deck, slides, components, config)
 }
 
 fn resolve_component_tag(components: Option<&ComponentRegistry>, component_name: &str) -> String {

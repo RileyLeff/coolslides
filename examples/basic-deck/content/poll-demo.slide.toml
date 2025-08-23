@@ -1,0 +1,40 @@
+# Dynamic Slot Demo Slide with defer="visible"
+
+modelVersion = "1.0"
+id = "poll-demo"
+
+[component]
+name = "TwoColSlide"
+versionReq = "^1"
+
+[props]
+title = "Live Poll Demo"
+leftWidth = "55%"
+rightWidth = "45%"
+gap = "2rem"
+
+[slots.left]
+kind = "markdown"
+value = """
+### Dynamic Slot Loading
+
+This slide demonstrates a dynamic slot component (cs-poll) with `defer="visible"`:
+
+- The module for the poll widget is not loaded until this slide is visible.
+- When it loads, complex props are (re)applied so it is fully functional.
+- Works in dev and in exported HTML/PDF.
+
+Advance to this slide to see the poll load.
+"""
+
+[slots.right]
+kind = "component"
+tag = "cs-poll"
+module = "/packages/components/dist/widgets/PollWidget.js"
+defer = "visible"
+
+[slots.right.props]
+question = "What's your favorite editor?"
+options = ["VS Code", "Vim", "Emacs", "NeoVim", "Other"]
+showResults = true
+

@@ -18,6 +18,8 @@ export class SlideRouter implements Router {
     this.context = context;
     this.bus = bus;
     this.fragmentManager = new DefaultFragmentManager(bus);
+    // Ensure fragment styles/behavior are initialized early
+    this.fragmentManager.initialize();
     this.buildSlideSequence();
     this.setupEventListeners();
     this.loadFromHash();
@@ -144,6 +146,11 @@ export class SlideRouter implements Router {
 
   getCurrentSlide(): string | null {
     return this.currentSlideId;
+  }
+
+  // Safety alias for plugin/runtime callers
+  getCurrentSlideId(): string | null {
+    return this.getCurrentSlide();
   }
 
   getCurrentFragment(): number {

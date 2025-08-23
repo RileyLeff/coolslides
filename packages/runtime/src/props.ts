@@ -15,6 +15,21 @@ export class RuntimePropertyManager {
     this.bus.on('slide:enter', (data) => {
       this.applyPropsForSlide(data.slideId);
     });
+
+    // Re-apply props when a dynamic module is loaded to ensure complex props land
+    this.bus.on('module:loaded', ({ path }) => {
+      const selector = `[data-slot-component][data-module="${path}"]`;
+      document.querySelectorAll(selector).forEach(el => {
+        this.triggerPropApplication(el as HTMLElement);
+      });
+      // Also reapply on currently active slide in case component definitions appeared late
+      const active = document.querySelector('[data-slide][data-active]');
+      if (active) {
+        active.querySelectorAll('[data-props-id]').forEach(el => {
+          this.triggerPropApplication(el as HTMLElement);
+        });
+      }
+    });
   }
 
   initialize(): void {

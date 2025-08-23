@@ -17,6 +17,7 @@ export class DynamicModuleLoader {
   private options: ModuleLoaderOptions;
   private loadedModules = new Set<string>();
   private loadingPromises = new Map<string, Promise<void>>();
+  private visibleObservers = new Map<Element, IntersectionObserver>();
 
   constructor(bus: EventBus, options: ModuleLoaderOptions = {}) {
     this.bus = bus;
@@ -85,11 +86,42 @@ export class DynamicModuleLoader {
       const defer = element.getAttribute('data-defer') as 'eager' | 'visible' | 'idle' | null;
       
       if (module && tag) {
-        loadPromises.push(this.loadComponent(module, tag, defer || 'eager'));
+        if (defer === 'visible') {
+          this.observeVisible(element, module, tag);
+        } else {
+          loadPromises.push(this.loadComponent(module, tag, defer || 'eager'));
+        }
       }
     });
 
     await Promise.all(loadPromises);
+  }
+
+  /**
+   * Observe an element and load its module when it becomes visible
+   */
+  private observeVisible(element: Element, modulePath: string, tag: string): void {
+    // Avoid duplicate observers
+    if (this.visibleObservers.has(element)) return;
+
+    const observer = new IntersectionObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.isIntersecting) {
+          // Once visible, load and unobserve
+          this.loadComponent(modulePath, tag, 'eager').finally(() => {
+            const obs = this.visibleObservers.get(element);
+            if (obs) {
+              obs.unobserve(element);
+              obs.disconnect();
+              this.visibleObservers.delete(element);
+            }
+          });
+        }
+      }
+    }, { root: null, threshold: 0.1 });
+
+    observer.observe(element);
+    this.visibleObservers.set(element, observer);
   }
 
   /**

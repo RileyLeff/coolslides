@@ -22,7 +22,12 @@ ref = "features"
 type = "ref"
 ref = "quote-example"
 
+[[sequence]]
+type = "ref"
+ref = "poll-demo"
+
 [notes]
 intro = "Welcome to Coolslides! This is an example presentation showcasing the basic components."
 features = "Here we demonstrate the two-column layout with some key features."
 quote-example = "A beautiful quote slide to demonstrate the quote component."
+poll-demo = "Dynamic slot demo: Poll widget loads when visible."
