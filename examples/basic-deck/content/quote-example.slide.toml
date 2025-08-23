@@ -8,9 +8,9 @@ name = "QuoteSlide"
 versionReq = "^1"
 
 [props]
-quote = "The best way to predict the future is to implement it."
-author = "Alan Kay"
-attribution = "Computer Scientist"
+quote = "I don't care much for powerpoint. So I made this."
+author = "Riley Leff"
+attribution = "Nitpicky Guy"
 style = "default"
 
 [styleOverrides]
