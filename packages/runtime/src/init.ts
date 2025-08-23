@@ -10,6 +10,8 @@ import { DefaultSpeakerView } from './speaker-view.js';
 import { RuntimePropertyManager } from './props.js';
 import { DynamicModuleLoader } from './module-loader.js';
 import { RuntimeContext, DeckManifest, SlideDoc } from './types.js';
+import { RoomsClient } from './rooms.js';
+import { PluginManager } from './plugins.js';
 
 let initialized = false;
 let runtimeContext: RuntimeContext | null = null;
@@ -72,6 +74,17 @@ export async function init(deck?: DeckManifest, slides?: SlideDoc[]): Promise<Ru
     basePath: window.location.origin,
     importMap: await loadImportMap()
   });
+  const importMap = await loadImportMap();
+  
+  // Rooms client (room from ?room= or default)
+  const rooms = new RoomsClient(bus, {});
+  rooms.connect();
+  
+  // Plugin manager (load deck.plugins if provided)
+  const pluginManager = new PluginManager(context, bus, importMap, rooms);
+  if (Array.isArray(deckData.plugins) && deckData.plugins.length) {
+    try { await pluginManager.loadAll(deckData.plugins); } catch (e) { console.warn('Plugins init failed', e); }
+  }
   
   // Preload any existing slot components
   await moduleLoader.preloadAllSlotComponents();

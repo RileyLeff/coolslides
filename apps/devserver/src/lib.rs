@@ -204,14 +204,28 @@ impl AppState {
                     let reload_room = "__reload".to_string();
                     let _ = state.room_manager.ensure_room(reload_room.clone()).await;
                     if let Some(room) = state.room_manager.get_room(&reload_room).await {
+                        // Send prepare event first for overlay UX
                         let _ = room.broadcast_message(rooms::RoomMessage::Event {
                             event: rooms::EventData {
-                                name: "reload".to_string(),
+                                name: "reload:prepare".to_string(),
                                 data: serde_json::json!({}),
                                 client_id: "server".to_string(),
                             },
                             timestamp: Utc::now(),
                         }).await;
+                        // Follow with actual reload shortly after
+                        let room_clone = room.clone();
+                        tokio::spawn(async move {
+                            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+                            let _ = room_clone.broadcast_message(rooms::RoomMessage::Event {
+                                event: rooms::EventData {
+                                    name: "reload".to_string(),
+                                    data: serde_json::json!({}),
+                                    client_id: "server".to_string(),
+                                },
+                                timestamp: Utc::now(),
+                            }).await;
+                        });
                     }
                 }
                 last_reload = Some(Instant::now());
@@ -745,7 +759,30 @@ fn generate_export_html(
 
     // In dev mode (no deck_root), inject a tiny WS-based auto-reload client
     let dev_reload_script = if deck_root.is_none() {
-        r#"<script>(function(){try{var p=location.protocol==='https:'?'wss':'ws';var ws=new WebSocket(p+'://'+location.host+'/rooms/__reload');ws.onmessage=function(e){try{var m=JSON.parse(e.data);if(m.type==='event'&&m.event&&m.event.name==='reload'){location.reload();}}catch(_){} };}catch(_){}})();</script>"#.to_string()
+        r#"<script>(function(){try{var p=location.protocol==='https:'?'wss':'ws';var ws=new WebSocket(p+'://'+location.host+'/rooms/__reload');
+var overlay;
+function ensureOverlay(){
+  if (overlay) return overlay;
+  overlay = document.createElement('div');
+  overlay.setAttribute('style','position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,0.35);color:#fff;z-index:2147483647;font:600 16px system-ui, sans-serif');
+  overlay.innerHTML = '<div style="padding:12px 16px;background:#111;border-radius:8px;border:1px solid #333;box-shadow:0 2px 8px rgba(0,0,0,.4)">Reloading…</div>';
+  document.addEventListener('DOMContentLoaded', function(){ document.body.appendChild(overlay); }, { once: true });
+  return overlay;
+}
+ws.onmessage=function(e){
+  try{
+    var m=JSON.parse(e.data);
+    if(m.type==='event'&&m.event){
+      if(m.event.name==='reload:prepare'){
+        ensureOverlay(); if (overlay && overlay.style) { overlay.style.display='flex'; }
+      }
+      if(m.event.name==='reload'){
+        ensureOverlay(); if (overlay && overlay.style) { overlay.style.display='flex'; }
+        setTimeout(function(){ location.reload(); }, 10);
+      }
+    }
+  }catch(_){ }
+};}catch(_){})()</script>"#.to_string()
     } else { String::new() };
 
     let html = format!(r#"<!DOCTYPE html>
