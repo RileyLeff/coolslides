@@ -1,0 +1,80 @@
+{
+  "name": "PollWidget",
+  "version": "1.0.0",
+  "tag": "cs-poll",
+  "module": "/packages/components/dist/widgets/PollWidget.js",
+  "schema": {
+    "type": "object",
+    "required": [
+      "question"
+    ],
+    "properties": {
+      "question": {
+        "type": "string",
+        "description": "Poll question to ask the audience"
+      },
+      "type": {
+        "type": "string",
+        "enum": [
+          "multiple-choice",
+          "text",
+          "rating",
+          "yes-no"
+        ],
+        "description": "Type of poll question",
+        "default": "multiple-choice"
+      },
+      "options": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        },
+        "description": "Options for multiple-choice questions"
+      },
+      "maxRating": {
+        "type": "number",
+        "description": "Maximum rating for rating questions",
+        "minimum": 1,
+        "maximum": 10,
+        "default": 5
+      },
+      "allowMultiple": {
+        "type": "boolean",
+        "description": "Allow multiple selections in multiple-choice",
+        "default": false
+      },
+      "anonymous": {
+        "type": "boolean",
+        "description": "Make responses anonymous",
+        "default": true
+      },
+      "autoStart": {
+        "type": "boolean",
+        "description": "Start poll automatically when slide appears",
+        "default": true
+      },
+      "showResults": {
+        "type": "boolean",
+        "description": "Show results immediately after voting",
+        "default": false
+      }
+    }
+  },
+  "tokensUsed": [
+    "--poll-background",
+    "--poll-border",
+    "--poll-border-radius",
+    "--poll-question-color",
+    "--poll-question-size",
+    "--poll-option-background",
+    "--poll-option-hover-background",
+    "--poll-button-background",
+    "--poll-button-color",
+    "--poll-results-bar-color"
+  ],
+  "capabilities": [
+    "rooms.ws",
+    "storage.kv",
+    "ui.toast"
+  ]
+}

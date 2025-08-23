@@ -25,7 +25,7 @@ import { CoolslidesElement, property, component } from '@coolslides/component-sd
         type: 'string',
         description: 'Additional attribution (company, book, etc.)'
       },
-      style: {
+      variant: {
         type: 'string',
         description: 'Quote style variant',
         enum: ['default', 'large', 'minimal'],
@@ -43,7 +43,7 @@ import { CoolslidesElement, property, component } from '@coolslides/component-sd
   ]
 })
 export class QuoteSlide extends CoolslidesElement {
-  static observedAttributes = ['quote', 'author', 'attribution', 'style'];
+  static observedAttributes = ['quote', 'author', 'attribution', 'variant'];
 
   @property({ type: String, reflect: true })
   quote = '';
@@ -54,8 +54,8 @@ export class QuoteSlide extends CoolslidesElement {
   @property({ type: String, reflect: true })
   attribution = '';
 
-  @property({ type: String, reflect: true })
-  style = 'default';
+  @property({ type: String, reflect: true, attribute: 'variant' })
+  variant = 'default';
 
   constructor() {
     super();
@@ -128,30 +128,30 @@ export class QuoteSlide extends CoolslidesElement {
         }
 
         /* Style variants */
-        :host([style="large"]) .quote-text {
+        :host([variant="large"]) .quote-text {
           font-size: var(--quote-size-large, 2.5rem);
         }
 
-        :host([style="large"]) .quote-mark {
+        :host([variant="large"]) .quote-mark {
           font-size: var(--quote-mark-size-large, 5rem);
         }
 
-        :host([style="minimal"]) .quote-mark {
+        :host([variant="minimal"]) .quote-mark {
           display: none;
         }
 
-        :host([style="minimal"]) .quote-text {
+        :host([variant="minimal"]) .quote-text {
           font-style: normal;
           position: relative;
         }
 
-        :host([style="minimal"]) .quote-text::before {
+        :host([variant="minimal"]) .quote-text::before {
           content: '"';
           font-size: 1.2em;
           color: var(--accent-color, #007acc);
         }
 
-        :host([style="minimal"]) .quote-text::after {
+        :host([variant="minimal"]) .quote-text::after {
           content: '"';
           font-size: 1.2em;
           color: var(--accent-color, #007acc);

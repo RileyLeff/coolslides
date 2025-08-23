@@ -110,21 +110,20 @@ export class CodeSlide extends CoolslidesElement {
     ]);
   }
 
-  async connectedCallback(): void {
+  connectedCallback(): void {
     super.connectedCallback();
-    
-    // Initialize syntax highlighter
-    this.highlighter = new SyntaxHighlighter();
-    await this.highlighter.initialize();
-    
-    this.requestUpdate();
+    // Initialize syntax highlighter without making the callback async
+    (async () => {
+      this.highlighter = new SyntaxHighlighter();
+      await this.highlighter.initialize();
+      this.requestUpdate();
+    })();
   }
 
-  protected async update(): Promise<void> {
+  protected update(): void {
     if (!this.shadowRoot || !this.highlighter) return;
-
-    // Highlight the code
-    const highlightedCode = await this.highlighter.highlight(
+    // Highlight asynchronously, then render
+    this.highlighter.highlight(
       this.code,
       this.language,
       {
@@ -132,9 +131,9 @@ export class CodeSlide extends CoolslidesElement {
         lineNumbers: this.lineNumbers,
         highlightLines: this.parseHighlightLines(this.highlightLines)
       }
-    );
-
-    this.shadowRoot.innerHTML = `
+    ).then((highlightedCode) => {
+      if (!this.shadowRoot) return;
+      this.shadowRoot.innerHTML = `
       <style>
         :host {
           display: block;
@@ -309,6 +308,7 @@ export class CodeSlide extends CoolslidesElement {
         </div>
       </div>
     `;
+    }).catch(() => {/* no-op */});
   }
 
   private parseHighlightLines(highlightLines: string): number[] {

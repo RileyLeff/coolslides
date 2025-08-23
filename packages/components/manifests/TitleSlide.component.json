@@ -2,7 +2,7 @@
   "name": "TitleSlide",
   "version": "1.0.0",
   "tag": "cs-title-slide",
-  "module": "/components/dist/slides/TitleSlide.js",
+  "module": "/packages/components/dist/slides/TitleSlide.js",
   "schema": {
     "type": "object",
     "required": [
@@ -36,5 +36,6 @@
     "--subtitle-size",
     "--background-color",
     "--accent-color"
-  ]
+  ],
+  "capabilities": []
 }

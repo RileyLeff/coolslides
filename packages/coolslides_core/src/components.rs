@@ -31,6 +31,33 @@ pub fn extract_manifests_from_directory(components_dir: &Path) -> Result<Compone
     Ok(registry)
 }
 
+/// Extract component manifests from pre-generated JSON files in a manifests directory
+pub fn extract_manifests_from_manifests_dir(manifests_dir: &Path) -> Result<ComponentRegistry> {
+    let mut registry = ComponentRegistry {
+        components: HashMap::new(),
+        tag_to_name: HashMap::new(),
+    };
+
+    if !manifests_dir.exists() {
+        return Ok(registry);
+    }
+
+    for entry in walkdir::WalkDir::new(manifests_dir).into_iter().filter_map(|e| e.ok()) {
+        let path = entry.path();
+        if path.extension().and_then(|s| s.to_str()) != Some("json") {
+            continue;
+        }
+        if let Ok(content) = fs::read_to_string(path) {
+            if let Ok(manifest) = serde_json::from_str::<ComponentManifest>(&content) {
+                registry.tag_to_name.insert(manifest.tag.clone(), manifest.name.clone());
+                registry.components.insert(manifest.name.clone(), manifest);
+            }
+        }
+    }
+
+    Ok(registry)
+}
+
 /// Extract a component manifest from TypeScript source code
 fn extract_manifest_from_source(content: &str, file_path: &Path) -> Result<ComponentManifest> {
     // Regular expression to match the @component decorator

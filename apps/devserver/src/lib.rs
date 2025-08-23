@@ -7,11 +7,13 @@ use axum::{
     body::Body,
 };
 use coolslides_core::{DeckManifest, SlideDoc, components, ComponentRegistry};
+use chrono::Utc;
 use serde::Deserialize;
 use std::{collections::HashMap, path::{Path, PathBuf}, sync::Arc};
 use tokio::sync::RwLock;
 use tower_http::{cors::CorsLayer, services::ServeDir, trace::TraceLayer};
 use tokio::fs;
+use notify::{RecommendedWatcher, RecursiveMode, Watcher};
 use pulldown_cmark::{Parser, html};
 use maplit::{hashset, hashmap};
 
@@ -113,28 +115,27 @@ impl AppState {
             *slides = slides_map;
         }
         
-        // Try to load component manifests for tag resolution and validation support
-        let possible_components_paths = [
+        // Try to load component manifests (prefer generated JSON, fallback to TS source)
+        let manifests_candidates = [
+            Path::new("packages/components/manifests"),        // From project root
+            Path::new("../../packages/components/manifests"),  // From examples/basic-deck
+            Path::new("../packages/components/manifests"),     // From apps/devserver
+        ];
+        let src_candidates = [
             Path::new("packages/components/src"),        // From project root
             Path::new("../../packages/components/src"),  // From examples/basic-deck
             Path::new("../packages/components/src"),     // From apps/devserver
         ];
 
-        let registry_opt = possible_components_paths
+        let registry_opt = manifests_candidates
             .iter()
-            .find(|path| path.exists())
-            .and_then(|components_dir| {
-                match components::extract_manifests_from_directory(components_dir) {
-                    Ok(registry) => Some(registry),
-                    Err(e) => {
-                        eprintln!(
-                            "Warning: Failed to load component manifests from {}: {}",
-                            components_dir.display(),
-                            e
-                        );
-                        None
-                    }
-                }
+            .find(|p| p.exists())
+            .and_then(|dir| components::extract_manifests_from_manifests_dir(dir).ok())
+            .or_else(|| {
+                src_candidates
+                    .iter()
+                    .find(|p| p.exists())
+                    .and_then(|components_dir| components::extract_manifests_from_directory(components_dir).ok())
             });
 
         {
@@ -146,25 +147,77 @@ impl AppState {
         Ok(())
     }
     
-    /// Watch for file changes and reload
+    /// Watch for file changes and reload using `notify`
     pub async fn start_file_watcher(&self, deck_dir: impl AsRef<Path>) -> anyhow::Result<()> {
         use tokio::time::{sleep, Duration};
-        
+        use std::time::Instant;
         let deck_dir = deck_dir.as_ref().to_path_buf();
         let state = self.clone();
-        
-        tokio::spawn(async move {
-            loop {
-                sleep(Duration::from_secs(2)).await;
-                
-                // Simple polling-based file watcher for now
-                // In production, use a proper file watcher like notify
-                if let Err(e) = state.load_from_directory(&deck_dir).await {
-                    eprintln!("Failed to reload files: {}", e);
+
+        // Channel to bridge blocking notify events into async
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+        // Spawn blocking watcher thread
+        let watch_path = deck_dir.clone();
+        tokio::task::spawn_blocking(move || {
+            let (wtx, wrx) = std::sync::mpsc::channel();
+            let mut watcher: RecommendedWatcher = notify::recommended_watcher(wtx)
+                .expect("failed to create file watcher");
+            let _ = watcher.watch(&watch_path, RecursiveMode::Recursive);
+            for res in wrx {
+                match res {
+                    Ok(event) => {
+                        let _ = tx.send(event);
+                    }
+                    Err(e) => eprintln!("watch error: {}", e),
                 }
             }
         });
-        
+
+        // Async task to debounce and reload when relevant files change
+        tokio::spawn(async move {
+            let mut last_reload: Option<Instant> = None;
+            while let Some(event) = rx.recv().await {
+                // Filter for relevant extensions
+                let relevant = event.paths.iter().any(|p| {
+                    match p.extension().and_then(|s| s.to_str()) {
+                        Some(ext) => matches!(ext, "toml" | "css" | "md"),
+                        None => false,
+                    }
+                });
+                if !relevant { continue; }
+
+                // Basic debounce
+                if let Some(last) = last_reload {
+                    if last.elapsed() < std::time::Duration::from_millis(200) {
+                        continue;
+                    }
+                }
+
+                // Short delay to allow file writes to settle
+                sleep(Duration::from_millis(100)).await;
+                if let Err(e) = state.load_from_directory(&deck_dir).await {
+                    eprintln!("Failed to reload files: {}", e);
+                } else {
+                    println!("Reloaded deck files due to change");
+                    // Broadcast a reload message on the special reload room
+                    let reload_room = "__reload".to_string();
+                    let _ = state.room_manager.ensure_room(reload_room.clone()).await;
+                    if let Some(room) = state.room_manager.get_room(&reload_room).await {
+                        let _ = room.broadcast_message(rooms::RoomMessage::Event {
+                            event: rooms::EventData {
+                                name: "reload".to_string(),
+                                data: serde_json::json!({}),
+                                client_id: "server".to_string(),
+                            },
+                            timestamp: Utc::now(),
+                        }).await;
+                    }
+                }
+                last_reload = Some(Instant::now());
+            }
+        });
+
         Ok(())
     }
 }
@@ -263,16 +316,27 @@ pub fn load_deck_bundle(deck_dir: &std::path::Path) -> anyhow::Result<(
         }
     }
 
-    // Components registry
-    let possible_components_paths = [
-        std::path::Path::new("packages/components/src"),       // From project root
-        std::path::Path::new("../../packages/components/src"), // From examples/basic-deck
-        std::path::Path::new("../packages/components/src"),    // From apps/devserver
+    // Components registry (prefer JSON manifests over TS source)
+    let manifests_candidates = [
+        std::path::Path::new("packages/components/manifests"),
+        std::path::Path::new("../../packages/components/manifests"),
+        std::path::Path::new("../packages/components/manifests"),
     ];
-    let registry = possible_components_paths
+    let src_candidates = [
+        std::path::Path::new("packages/components/src"),
+        std::path::Path::new("../../packages/components/src"),
+        std::path::Path::new("../packages/components/src"),
+    ];
+    let registry = manifests_candidates
         .iter()
-        .find(|path| path.exists())
-        .and_then(|components_dir| components::extract_manifests_from_directory(components_dir).ok());
+        .find(|p| p.exists())
+        .and_then(|dir| components::extract_manifests_from_manifests_dir(dir).ok())
+        .or_else(|| {
+            src_candidates
+                .iter()
+                .find(|p| p.exists())
+                .and_then(|components_dir| components::extract_manifests_from_directory(components_dir).ok())
+        });
 
     Ok((deck_manifest, slides_map, registry))
 }
@@ -679,6 +743,11 @@ fn generate_export_html(
         )
     };
 
+    // In dev mode (no deck_root), inject a tiny WS-based auto-reload client
+    let dev_reload_script = if deck_root.is_none() {
+        r#"<script>(function(){try{var p=location.protocol==='https:'?'wss':'ws';var ws=new WebSocket(p+'://'+location.host+'/rooms/__reload');ws.onmessage=function(e){try{var m=JSON.parse(e.data);if(m.type==='event'&&m.event&&m.event.name==='reload'){location.reload();}}catch(_){} };}catch(_){}})();</script>"#.to_string()
+    } else { String::new() };
+
     let html = format!(r#"<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -695,6 +764,7 @@ fn generate_export_html(
     {}
     <script type="module" src="/packages/runtime/dist/index.js"></script>
     <script type="module" src="/packages/components/dist/index.js"></script>
+    {}
 </head>
 <body>
     <div class="coolslides-presentation">
@@ -722,6 +792,7 @@ fn generate_export_html(
         })).unwrap_or("{}".into()),
         theme_style_content,
         tokens_block,
+        dev_reload_script,
         slides_html,
         serde_json::to_string_pretty(deck)?,
         serde_json::to_string_pretty(&slides.values().collect::<Vec<_>>())?

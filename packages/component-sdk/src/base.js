@@ -104,11 +104,14 @@ export function property(options = {}) {
         }
         const descriptor = {
             get() {
+                const stored = this[`__${propertyKey}`];
                 if (attributeName) {
-                    const value = this.getAttribute(attributeName);
-                    return convertFromAttribute(value, options.type);
+                    if (this.hasAttribute(attributeName)) {
+                        const value = this.getAttribute(attributeName);
+                        return convertFromAttribute(value, options.type);
+                    }
                 }
-                return this[`__${propertyKey}`];
+                return stored;
             },
             set(value) {
                 const oldValue = this[propertyKey];

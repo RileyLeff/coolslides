@@ -351,24 +351,35 @@ async fn validate_deck_in_directory(deck_dir: &str) -> Result<()> {
     }
     
     // Load component registry - try to find components directory
-    let possible_components_paths = [
+    let manifests_candidates = [
+        Path::new("packages/components/manifests"),        // From project root
+        Path::new("../../packages/components/manifests"),  // From examples/basic-deck
+        Path::new("../packages/components/manifests"),     // From apps/cli
+    ];
+    let src_candidates = [
         Path::new("packages/components/src"),        // From project root
         Path::new("../../packages/components/src"),  // From examples/basic-deck
         Path::new("../packages/components/src"),     // From apps/cli
     ];
     
-    let registry = possible_components_paths
+    let registry = manifests_candidates
         .iter()
         .find(|path| path.exists())
-        .and_then(|components_dir| {
-            match components::extract_manifests_from_directory(components_dir) {
-                Ok(registry) => Some(registry),
-                Err(e) => {
-                    eprintln!("Warning: Failed to load component manifests from {}: {}", components_dir.display(), e);
-                    eprintln!("Schema validation will be skipped");
-                    None
-                }
-            }
+        .and_then(|dir| components::extract_manifests_from_manifests_dir(dir).ok())
+        .or_else(|| {
+            src_candidates
+                .iter()
+                .find(|path| path.exists())
+                .and_then(|components_dir| {
+                    match components::extract_manifests_from_directory(components_dir) {
+                        Ok(registry) => Some(registry),
+                        Err(e) => {
+                            eprintln!("Warning: Failed to load component manifests from {}: {}", components_dir.display(), e);
+                            eprintln!("Schema validation will be skipped");
+                            None
+                        }
+                    }
+                })
         });
     
     // Perform validation

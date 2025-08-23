@@ -155,11 +155,16 @@ export function property(options: {
     // Create property descriptor
     const descriptor: PropertyDescriptor = {
       get(this: CoolslidesElement) {
+        // Prefer the internally stored value when no attribute is present,
+        // so default class field values work without needing reflected attrs.
+        const stored = (this as any)[`__${propertyKey}`];
         if (attributeName) {
-          const value = this.getAttribute(attributeName);
-          return convertFromAttribute(value, options.type);
+          if (this.hasAttribute(attributeName)) {
+            const value = this.getAttribute(attributeName);
+            return convertFromAttribute(value, options.type);
+          }
         }
-        return (this as any)[`__${propertyKey}`];
+        return stored;
       },
       
       set(this: CoolslidesElement, value: any) {

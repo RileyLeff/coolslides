@@ -133,15 +133,15 @@ export class PollWidget extends CoolslidesElement {
       }
     }
 
-    // Listen for poll events from the plugin
-    this.addEventListener('poll:start', this.onPollStart.bind(this));
-    this.addEventListener('poll:stop', this.onPollStop.bind(this));
-    this.addEventListener('poll:results', this.onPollResults.bind(this));
+    // Listen for poll events from the plugin (use loose typing for custom events)
+    this.addEventListener('poll:start', (e) => this.onPollStart(e as CustomEvent<any>));
+    this.addEventListener('poll:stop', (e) => this.onPollStop(e as CustomEvent<any>));
+    this.addEventListener('poll:results', (e) => this.onPollResults(e as CustomEvent<any>));
     
     this.requestUpdate();
   }
 
-  protected async update(): Promise<void> {
+  protected update(): void {
     if (!this.shadowRoot) return;
 
     this.shadowRoot.innerHTML = `
@@ -746,13 +746,13 @@ export class PollWidget extends CoolslidesElement {
     }
   }
 
-  private onPollStart(event: Event): void {
+  private onPollStart(_event: Event): void {
     this.pollActive = true;
     this.hasVoted = false;
     this.requestUpdate();
   }
 
-  private onPollStop(event: Event): void {
+  private onPollStop(_event: Event): void {
     this.pollActive = false;
     this.requestUpdate();
   }

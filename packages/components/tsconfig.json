@@ -15,8 +15,8 @@
     "moduleResolution": "node",
     "baseUrl": ".",
     "paths": {
-      "@coolslides/component-sdk": ["../component-sdk/src/index.ts"],
-      "@coolslides/component-sdk/*": ["../component-sdk/src/*"]
+      "@coolslides/component-sdk": ["../component-sdk/dist/index.d.ts"],
+      "@coolslides/component-sdk/*": ["../component-sdk/dist/*"]
     },
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,

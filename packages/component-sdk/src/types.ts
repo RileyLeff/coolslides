@@ -37,6 +37,13 @@ export interface SchemaProperty {
   enum?: any[];
   items?: SchemaProperty;
   properties?: Record<string, SchemaProperty>;
+  // Common JSON Schema facets
+  minimum?: number;
+  maximum?: number;
+  minLength?: number;
+  maxLength?: number;
+  pattern?: string;
+  format?: string;
 }
 
 // Component events

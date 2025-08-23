@@ -1,0 +1,48 @@
+{
+  "name": "TwoColSlide",
+  "version": "1.0.0",
+  "tag": "cs-two-col-slide",
+  "module": "/packages/components/dist/slides/TwoColSlide.js",
+  "schema": {
+    "type": "object",
+    "properties": {
+      "title": {
+        "type": "string",
+        "description": "Optional slide title"
+      },
+      "leftWidth": {
+        "type": "string",
+        "description": "Width of left column (CSS value)",
+        "default": "50%"
+      },
+      "rightWidth": {
+        "type": "string",
+        "description": "Width of right column (CSS value)",
+        "default": "50%"
+      },
+      "gap": {
+        "type": "string",
+        "description": "Gap between columns (CSS value)",
+        "default": "2rem"
+      },
+      "verticalAlign": {
+        "type": "string",
+        "description": "Vertical alignment of columns",
+        "enum": [
+          "top",
+          "center",
+          "bottom"
+        ],
+        "default": "top"
+      }
+    }
+  },
+  "tokensUsed": [
+    "--title-color",
+    "--title-size",
+    "--background-color",
+    "--text-color",
+    "--column-gap"
+  ],
+  "capabilities": []
+}

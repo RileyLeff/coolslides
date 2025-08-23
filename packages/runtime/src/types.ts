@@ -110,6 +110,8 @@ export interface RuntimeContext {
 export interface Router {
   navigate(slideId: string, fragment?: number): void;
   getCurrentSlide(): string | null;
+  // Alias used by some plugins; keep both for compatibility
+  getCurrentSlideId(): string | null;
   getCurrentFragment(): number;
   getNextSlide(): string | null;
   getPrevSlide(): string | null;

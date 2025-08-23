@@ -1,0 +1,45 @@
+{
+  "name": "QuoteSlide",
+  "version": "1.0.0",
+  "tag": "cs-quote-slide",
+  "module": "/packages/components/dist/slides/QuoteSlide.js",
+  "schema": {
+    "type": "object",
+    "required": [
+      "quote"
+    ],
+    "properties": {
+      "quote": {
+        "type": "string",
+        "description": "The quote text"
+      },
+      "author": {
+        "type": "string",
+        "description": "Quote author name"
+      },
+      "attribution": {
+        "type": "string",
+        "description": "Additional attribution (company, book, etc.)"
+      },
+      "variant": {
+        "type": "string",
+        "description": "Quote style variant",
+        "enum": [
+          "default",
+          "large",
+          "minimal"
+        ],
+        "default": "default"
+      }
+    }
+  },
+  "tokensUsed": [
+    "--quote-color",
+    "--quote-size",
+    "--author-color",
+    "--author-size",
+    "--background-color",
+    "--accent-color"
+  ],
+  "capabilities": []
+}
