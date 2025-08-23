@@ -104,12 +104,15 @@ impl PDFExporter {
         let theme_css = read_css(base_dir, &deck.theme).unwrap_or_default();
         let tokens_css = deck.tokens.as_ref().and_then(|p| read_css(base_dir, p)).unwrap_or_default();
 
+        let base_href = base_dir.map(|p| format!("file://{}/", p.canonicalize().unwrap_or_else(|_| p.to_path_buf()).to_string_lossy()));
+
         let html = format!(r#"<!DOCTYPE html>
 <html lang="en" data-deck-title="{}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{}</title>
+    {}
     <!-- Inlined Theme CSS -->
     <style>
         {}
@@ -150,22 +153,48 @@ impl PDFExporter {
     </div>
 
     <script>
-        // Expand all fragments for print
-        document.addEventListener('DOMContentLoaded', function() {{
-            const fragments = document.querySelectorAll('.fragment-hidden');
-            fragments.forEach(fragment => {{
-                fragment.classList.remove('fragment-hidden');
-                fragment.classList.add('fragment-visible');
-            }});
-            
-            // Trigger print-ready event
-            window.coolslidesExportReady = true;
-        }});
+        (function() {{
+            function allImagesComplete() {{
+                const imgs = Array.from(document.images);
+                return imgs.every(img => img.complete && img.naturalWidth > 0);
+            }}
+            function whenFontsReady() {{
+                if (document.fonts && document.fonts.ready) {{
+                    return document.fonts.ready.catch(() => undefined);
+                }}
+                return Promise.resolve();
+            }}
+            function raf() {{
+                return new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+            }}
+            async function ready() {{
+                // Expand fragments immediately
+                const fragments = document.querySelectorAll('.fragment-hidden');
+                fragments.forEach(fragment => {{
+                    fragment.classList.remove('fragment-hidden');
+                    fragment.classList.add('fragment-visible');
+                }});
+                await whenFontsReady();
+                const start = Date.now();
+                const maxWait = 30000; // safety in case images stall
+                while ((!allImagesComplete()) && (Date.now() - start) < maxWait) {{
+                    await raf();
+                }}
+                // Mark ready
+                window.coolslidesExportReady = true;
+                // Stop keepalive
+                if (window.__coolslidesKeepAlive) clearInterval(window.__coolslidesKeepAlive);
+            }}
+            // Keep the event loop busy until ready, so headless Chrome with virtual time budget waits
+            window.__coolslidesKeepAlive = setInterval(() => {{}}, 50);
+            document.addEventListener('DOMContentLoaded', () => {{ ready(); }}, {{ once: true }});
+        }})();
     </script>
 </body>
 </html>"#,
             deck.title,
             deck.title,
+            base_href.as_ref().map(|u| format!("<base href=\"{}\">", u)).unwrap_or_default(),
             theme_css,
             tokens_css,
             print_styles,
@@ -224,9 +253,8 @@ impl PDFExporter {
             "--disable-dev-shm-usage",
             "--disable-extensions",
             "--disable-plugins",
-            "--disable-images",
             "--run-all-compositor-stages-before-draw",
-            "--virtual-time-budget=5000", // Wait for content to load
+            &format!("--virtual-time-budget={}", config.timeout),
             "--print-to-pdf",
         ]);
 

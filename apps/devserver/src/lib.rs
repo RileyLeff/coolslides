@@ -571,6 +571,7 @@ fn generate_export_html(
 
     let theme_css = inline_css(deck_root, &deck.theme);
     let tokens_css = deck.tokens.as_ref().and_then(|p| inline_css(deck_root, p));
+    let base_href = deck_root.map(|p| format!("file://{}/", p.canonicalize().unwrap_or_else(|_| p.to_path_buf()).to_string_lossy()));
     
     let html = format!(r#"<!DOCTYPE html>
 <html lang="en">
@@ -578,6 +579,7 @@ fn generate_export_html(
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{}</title>
+    {}
     <!-- Inlined Theme CSS -->
     <style>
         {}
@@ -602,6 +604,7 @@ fn generate_export_html(
 </body>
 </html>"#,
         deck.title,
+        base_href.as_ref().map(|u| format!("<base href=\"{}\">", u)).unwrap_or_default(),
         theme_css.unwrap_or_default(),
         tokens_css.map(|c| format!("<style>\n{}\n</style>", c)).unwrap_or_default(),
         slides_html,
