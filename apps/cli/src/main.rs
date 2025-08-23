@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use coolslides_core::{DeckManifest, SlideDoc};
+use coolslides_core::{DeckManifest, SlideDoc, ComponentRegistry, components, validation};
 use anyhow::Result;
 
 #[derive(Parser)]
@@ -149,9 +149,16 @@ async fn main() -> Result<()> {
                 }
             }
         }
-        Commands::Validate { format, strict } => {
-            println!("Validating slide deck (format: {})", format);
-            // TODO: Implement validation
+        Commands::Validate { format: _, strict: _ } => {
+            match validate_deck_in_directory(".").await {
+                Ok(()) => {
+                    println!("✓ Deck validation passed");
+                }
+                Err(e) => {
+                    eprintln!("✗ Deck validation failed: {}", e);
+                    std::process::exit(1);
+                }
+            }
         }
         Commands::Export { format } => {
             match format {
@@ -185,4 +192,122 @@ async fn main() -> Result<()> {
     }
     
     Ok(())
+}
+
+/// Validate a deck in the specified directory
+async fn validate_deck_in_directory(deck_dir: &str) -> Result<()> {
+    use std::collections::HashMap;
+    use std::path::Path;
+    use tokio::fs;
+    
+    let deck_path = Path::new(deck_dir);
+    
+    // Load deck manifest
+    let manifest_path = deck_path.join("slides.toml");
+    if !manifest_path.exists() {
+        return Err(anyhow::anyhow!("No slides.toml found in {}", deck_dir));
+    }
+    
+    let manifest_content = fs::read_to_string(&manifest_path).await?;
+    let deck_manifest: DeckManifest = toml::from_str(&manifest_content)?;
+    
+    // Load all slide files
+    let content_dir = deck_path.join("content");
+    let mut slides = Vec::new();
+    let mut slide_file_paths = HashMap::new();
+    
+    if content_dir.exists() {
+        let mut entries = fs::read_dir(&content_dir).await?;
+        while let Some(entry) = entries.next_entry().await? {
+            let path = entry.path();
+            if path.extension().and_then(|s| s.to_str()) == Some("toml") 
+                && path.file_stem().and_then(|s| s.to_str()).map(|s| s.ends_with(".slide")).unwrap_or(false) {
+                
+                let slide_content = fs::read_to_string(&path).await?;
+                let slide_doc: SlideDoc = match toml::from_str(&slide_content) {
+                    Ok(slide) => slide,
+                    Err(e) => {
+                        eprintln!("✗ Failed to parse {}: {}", path.display(), e);
+                        return Err(anyhow::anyhow!("Slide parsing failed"));
+                    }
+                };
+                
+                slide_file_paths.insert(slide_doc.id.clone(), path);
+                slides.push(slide_doc);
+            }
+        }
+    }
+    
+    // Load component registry - try to find components directory
+    let possible_components_paths = [
+        Path::new("packages/components/src"),        // From project root
+        Path::new("../../packages/components/src"),  // From examples/basic-deck
+        Path::new("../packages/components/src"),     // From apps/cli
+    ];
+    
+    let registry = possible_components_paths
+        .iter()
+        .find(|path| path.exists())
+        .and_then(|components_dir| {
+            match components::extract_manifests_from_directory(components_dir) {
+                Ok(registry) => Some(registry),
+                Err(e) => {
+                    eprintln!("Warning: Failed to load component manifests from {}: {}", components_dir.display(), e);
+                    eprintln!("Schema validation will be skipped");
+                    None
+                }
+            }
+        });
+    
+    // Perform validation
+    let validation_result = validation::validate_deck_with_registry(
+        &deck_manifest,
+        &slides,
+        registry.as_ref()
+    );
+    
+    // Report results
+    if !validation_result.errors.is_empty() {
+        eprintln!("Validation errors:");
+        for error in &validation_result.errors {
+            // Try to find which file the error came from
+            let file_context = if let Some(slide_id) = extract_slide_id_from_error(error) {
+                if let Some(file_path) = slide_file_paths.get(&slide_id) {
+                    format!(" in {}", file_path.display())
+                } else {
+                    format!(" in slide '{}'", slide_id)
+                }
+            } else {
+                " in slides.toml".to_string()
+            };
+            
+            eprintln!("  {}{}", error, file_context);
+        }
+        return Err(anyhow::anyhow!("Validation failed with {} errors", validation_result.errors.len()));
+    }
+    
+    if !validation_result.warnings.is_empty() {
+        println!("Validation warnings:");
+        for warning in &validation_result.warnings {
+            println!("  {}", warning);
+        }
+    }
+    
+    println!("✓ Validated {} slides successfully", slides.len());
+    if let Some(registry) = registry {
+        println!("✓ Schema validation completed with {} components", registry.components.len());
+    }
+    
+    Ok(())
+}
+
+/// Extract slide ID from validation error for file context
+fn extract_slide_id_from_error(error: &validation::ValidationError) -> Option<String> {
+    use validation::ValidationError;
+    match error {
+        ValidationError::UnknownComponent { slide_id, .. } => Some(slide_id.clone()),
+        ValidationError::InvalidComponentProps { slide_id, .. } => Some(slide_id.clone()),
+        ValidationError::MissingRequiredProp { slide_id, .. } => Some(slide_id.clone()),
+        _ => None,
+    }
 }

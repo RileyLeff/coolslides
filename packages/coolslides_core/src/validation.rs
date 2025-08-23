@@ -19,6 +19,24 @@ pub enum ValidationError {
     
     #[error("CS2001: Component version ranges cannot converge for {name}")]
     VersionConflict { name: String },
+    
+    #[error("CS3001: Unknown component: {name} in slide {slide_id}")]
+    UnknownComponent { name: String, slide_id: String },
+    
+    #[error("CS3002: Invalid props for component {component} in slide {slide_id}: {error}")]
+    InvalidComponentProps { 
+        component: String, 
+        slide_id: String, 
+        error: String,
+        json_path: Option<String>,
+    },
+    
+    #[error("CS3003: Missing required prop '{prop}' for component {component} in slide {slide_id}")]
+    MissingRequiredProp { 
+        component: String, 
+        slide_id: String, 
+        prop: String 
+    },
 }
 
 /// Validation context and results
@@ -49,8 +67,17 @@ impl ValidationResult {
     }
 }
 
-/// Validate a complete deck (manifest + slides)
+/// Validate a complete deck (manifest + slides) with optional component registry for schema validation
 pub fn validate_deck(manifest: &DeckManifest, slides: &[SlideDoc]) -> ValidationResult {
+    validate_deck_with_registry(manifest, slides, None)
+}
+
+/// Validate a complete deck (manifest + slides) with component schema validation
+pub fn validate_deck_with_registry(
+    manifest: &DeckManifest, 
+    slides: &[SlideDoc],
+    registry: Option<&ComponentRegistry>
+) -> ValidationResult {
     let mut result = ValidationResult::new();
     
     // Validate model version
@@ -71,6 +98,11 @@ pub fn validate_deck(manifest: &DeckManifest, slides: &[SlideDoc]) -> Validation
         
         // Validate individual slide
         validate_slide_internal(slide, &mut result);
+        
+        // Validate component schema if registry is provided
+        if let Some(registry) = registry {
+            validate_component_schema(slide, registry, &mut result);
+        }
     }
     
     // Validate sequence references
@@ -100,6 +132,14 @@ pub fn validate_deck(manifest: &DeckManifest, slides: &[SlideDoc]) -> Validation
 
 /// Validate a single slide document
 pub fn validate_slide(slide: &SlideDoc) -> ValidationResult {
+    validate_slide_with_registry(slide, None)
+}
+
+/// Validate a single slide document with component schema validation
+pub fn validate_slide_with_registry(
+    slide: &SlideDoc, 
+    registry: Option<&ComponentRegistry>
+) -> ValidationResult {
     let mut result = ValidationResult::new();
     
     if slide.model_version != "1.0" {
@@ -109,6 +149,12 @@ pub fn validate_slide(slide: &SlideDoc) -> ValidationResult {
     }
     
     validate_slide_internal(slide, &mut result);
+    
+    // Validate component schema if registry is provided
+    if let Some(registry) = registry {
+        validate_component_schema(slide, registry, &mut result);
+    }
+    
     result
 }
 
@@ -144,6 +190,88 @@ fn validate_slot(slot: &Slot, slot_name: &str, result: &mut ValidationResult) {
             }
         }
     }
+}
+
+/// Validate component props against JSON schema
+fn validate_component_schema(slide: &SlideDoc, registry: &ComponentRegistry, result: &mut ValidationResult) {
+    // Check if the component exists in the registry
+    let component = match registry.components.get(&slide.component.name) {
+        Some(component) => component,
+        None => {
+            result.add_error(ValidationError::UnknownComponent {
+                name: slide.component.name.clone(),
+                slide_id: slide.id.clone(),
+            });
+            return;
+        }
+    };
+    
+    // Compile the JSON schema
+    let schema = match jsonschema::JSONSchema::compile(&component.schema) {
+        Ok(schema) => schema,
+        Err(e) => {
+            result.add_error(ValidationError::InvalidComponentProps {
+                component: slide.component.name.clone(),
+                slide_id: slide.id.clone(),
+                error: format!("Invalid component schema: {}", e),
+                json_path: None,
+            });
+            return;
+        }
+    };
+    
+    // Validate props against schema  
+    if !schema.is_valid(&slide.props) {
+        // Schema validation failed - collect errors in a separate call
+        let validation_result = schema.validate(&slide.props);
+        if let Err(validation_errors) = validation_result {
+            let errors: Vec<_> = validation_errors.collect();
+            for error in errors {
+                let json_path = format_json_path(&error.instance_path.to_string());
+                
+                // Check if it's a missing required property
+                let error_str = error.to_string();
+                if error_str.contains("required") {
+                    if let Some(missing_prop) = extract_missing_property(&error) {
+                        result.add_error(ValidationError::MissingRequiredProp {
+                            component: slide.component.name.clone(),
+                            slide_id: slide.id.clone(),
+                            prop: missing_prop,
+                        });
+                        continue;
+                    }
+                }
+                
+                result.add_error(ValidationError::InvalidComponentProps {
+                    component: slide.component.name.clone(),
+                    slide_id: slide.id.clone(),
+                    error: error_str,
+                    json_path: Some(json_path),
+                });
+            }
+        }
+    }
+}
+
+/// Format JSON path from instance path for better error messages
+fn format_json_path(instance_path: &str) -> String {
+    if instance_path.is_empty() {
+        "props".to_string()
+    } else {
+        format!("props{}", instance_path)
+    }
+}
+
+/// Extract missing property name from validation error
+fn extract_missing_property(error: &jsonschema::ValidationError) -> Option<String> {
+    // This is a simplified extraction - in practice, you might need more sophisticated parsing
+    let error_str = error.to_string();
+    if let Some(start) = error_str.find("'") {
+        if let Some(end) = error_str[start + 1..].find("'") {
+            return Some(error_str[start + 1..start + 1 + end].to_string());
+        }
+    }
+    None
 }
 
 /// Validate lockfile consistency

@@ -13,7 +13,10 @@
       "Bash(npm run typecheck:*)",
       "Bash(../../target/debug/coolslides dev:*)",
       "Bash(timeout:*)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(../../target/debug/coolslides validate:*)",
+      "Bash(target/debug/coolslides validate:*)"
     ],
     "deny": [],
     "ask": []

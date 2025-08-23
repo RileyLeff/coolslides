@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
 use std::collections::HashMap;
+use serde_json::Value;
 
 /// SlideDoc represents a single slide in the presentation
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
@@ -272,4 +273,41 @@ pub struct ImportMap {
     /// Import specifier mappings
     #[serde(default)]
     pub imports: HashMap<String, String>,
+}
+
+/// Component manifest with JSON Schema for validation
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentManifest {
+    /// Component name
+    pub name: String,
+    /// Component version
+    pub version: String,
+    /// HTML tag name
+    pub tag: String,
+    /// Module path
+    pub module: String,
+    /// JSON Schema for component props
+    pub schema: Value,
+    /// CSS tokens used by this component
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub tokens_used: Vec<String>,
+    /// Capabilities required by this component
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub capabilities: Vec<String>,
+    /// Suggested transition for this component
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub suggested_transition: Option<String>,
+}
+
+/// Registry of all available components and their manifests
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct ComponentRegistry {
+    /// Components indexed by name
+    #[serde(default)]
+    pub components: HashMap<String, ComponentManifest>,
+    /// Tags indexed to component names
+    #[serde(default)]
+    pub tag_to_name: HashMap<String, String>,
 }
