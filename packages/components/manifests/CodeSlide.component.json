@@ -5,9 +5,7 @@
   "module": "/packages/components/dist/slides/CodeSlide.js",
   "schema": {
     "type": "object",
-    "required": [
-      "code"
-    ],
+    "required": [],
     "properties": {
       "title": {
         "type": "string",
@@ -16,6 +14,21 @@
       "code": {
         "type": "string",
         "description": "Code content to highlight"
+      },
+      "content": {
+        "type": "string",
+        "description": "Resolved code content (export-embedded)"
+      },
+      "source": {
+        "type": "object",
+        "description": "Optional external code source (devserver resolves)",
+        "properties": {
+          "type": { "type": "string", "enum": ["git"] },
+          "repo": { "type": "string" },
+          "ref": { "type": "string" },
+          "file": { "type": "string" },
+          "lines": { "type": "string" }
+        }
       },
       "language": {
         "type": "string",

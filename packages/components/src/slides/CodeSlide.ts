@@ -11,7 +11,7 @@ import { CoolslidesElement, property, component } from '@coolslides/component-sd
   tag: 'cs-code-slide',
   schema: {
     type: 'object',
-    required: ['code'],
+    required: [],
     properties: {
       title: {
         type: 'string',
@@ -20,6 +20,21 @@ import { CoolslidesElement, property, component } from '@coolslides/component-sd
       code: {
         type: 'string',
         description: 'Code content to highlight'
+      },
+      content: {
+        type: 'string',
+        description: 'Resolved code content (export-embedded)'
+      },
+      source: {
+        type: 'object',
+        description: 'Optional external code source (devserver resolves)',
+        properties: {
+          type: { type: 'string', enum: ['git'] },
+          repo: { type: 'string' },
+          ref: { type: 'string' },
+          file: { type: 'string' },
+          lines: { type: 'string' }
+        }
       },
       language: {
         type: 'string',
@@ -76,6 +91,14 @@ export class CodeSlide extends CoolslidesElement {
   @property({ type: String, reflect: true })
   code = '';
 
+  // When exported, content may be injected via props
+  @property({ type: String })
+  content = '';
+
+  // Complex props are applied via RuntimePropertyManager as direct properties
+  source?: { type?: string; repo?: string; ref?: string; file?: string; lines?: string };
+  steps?: Array<{ highlight?: string; scrollTo?: number }>;
+
   @property({ type: String, reflect: true })
   language = 'javascript';
 
@@ -95,6 +118,9 @@ export class CodeSlide extends CoolslidesElement {
   maxHeight = '';
 
   private highlighter: SyntaxHighlighter | null = null;
+  private _loadingSource = false;
+  private _fetched = false;
+  private _stepIndex = 0;
 
   constructor() {
     super();
@@ -121,6 +147,37 @@ export class CodeSlide extends CoolslidesElement {
   }
 
   protected update(): void {
+    // Resolve external source if provided and no code/content yet
+    if (!this._loadingSource && !this._fetched) {
+      const src = this.source as any;
+      const hasEmbedded = (this.content && this.content.length > 0);
+      if (!hasEmbedded && src && src.type === 'git') {
+        this._loadingSource = true;
+        fetch('/api/code/resolve', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            repo: src.repo || './',
+            ref: src.ref,
+            file: src.file,
+            lines: src.lines,
+          })
+        }).then(async (r) => {
+          if (!r.ok) throw new Error('resolve failed');
+          const j = await r.json();
+          // Set code from response
+          this.code = String(j.content || '');
+          this._fetched = true;
+          this.requestUpdate();
+        }).catch(() => {
+          // no-op; leave code as-is
+        }).finally(() => { this._loadingSource = false; });
+      } else if (hasEmbedded && !this.code) {
+        // Export path embeds into content
+        this.code = this.content;
+      }
+    }
+
     if (!this.shadowRoot || !this.highlighter) return;
     // Highlight asynchronously, then render
     this.highlighter.highlight(
@@ -307,6 +364,34 @@ export class CodeSlide extends CoolslidesElement {
       </div>
     `;
     }).catch(() => {/* no-op */});
+  }
+
+  // Basic stepper: consume steps by updating highlightLines and scrolling
+  onAdvance(dir: 'forward'|'backward' = 'forward', _ctx?: any): boolean {
+    const steps = Array.isArray(this.steps) ? this.steps : [];
+    if (!steps.length) return false;
+    const next = dir === 'forward' ? this._stepIndex + 1 : this._stepIndex - 1;
+    if (next < 0 || next >= steps.length) return false;
+    this._stepIndex = next;
+    const step = steps[this._stepIndex];
+    if (step && step.highlight) {
+      this.highlightLines = step.highlight;
+      this.requestUpdate();
+      // Try to scroll to the desired line after render
+      setTimeout(() => {
+        if (!this.shadowRoot) return;
+        const container = this.shadowRoot.querySelector('.code-content') as HTMLElement | null;
+        if (!container) return;
+        const target = (typeof step.scrollTo === 'number') ? step.scrollTo : undefined;
+        if (target != null) {
+          const lineEl = container.querySelector(`.line[data-line="${target}"]`) as HTMLElement | null;
+          if (lineEl) {
+            container.scrollTo({ top: lineEl.offsetTop - 24, behavior: 'smooth' });
+          }
+        }
+      }, 0);
+    }
+    return true;
   }
 
   private parseHighlightLines(highlightLines: string): number[] {
@@ -516,7 +601,7 @@ class SyntaxHighlighter {
       const isHighlighted = highlightLines.includes(lineNumber);
       const highlightClass = isHighlighted ? ' highlighted' : '';
       
-      return `<div class="line${highlightClass}">
+      return `<div class="line${highlightClass}" data-line="${lineNumber}">
         <span class="line-number">${lineNumber}</span>
         <span class="line-content">${line}</span>
       </div>`;

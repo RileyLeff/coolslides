@@ -249,6 +249,7 @@ pub fn create_router(state: AppState) -> Router {
         .route("/api/export/pdf", post(export_pdf))
         .route("/api/export/html", post(export_html))
         .route("/api/importmap", get(get_import_map))
+        .route("/api/code/resolve", post(code_resolve))
         .route("/healthz", get(health_check))
         .route("/test/markdown", post(test_markdown_sanitization))
         
@@ -357,8 +358,47 @@ pub fn load_deck_bundle(deck_dir: &std::path::Path) -> anyhow::Result<(
 
 /// Generate full export HTML for a deck directory
 pub fn export_deck_html_from_dir(deck_dir: &std::path::Path, strict_mode: bool) -> anyhow::Result<String> {
-    let (deck, slides, registry) = load_deck_bundle(deck_dir)?;
+    let (deck, mut slides, registry) = load_deck_bundle(deck_dir)?;
+    // Embed external code for deterministic export (e.g., CodeSlide with git source)
+    if let Err(e) = resolve_codeslide_content(&mut slides, deck_dir) {
+        eprintln!("Warning: failed to resolve external code content: {}", e);
+    }
     generate_export_html(&deck, &slides, registry.as_ref(), Some(deck_dir), &SanitizationConfig::new(strict_mode))
+}
+
+fn resolve_codeslide_content(
+    slides: &mut std::collections::HashMap<String, SlideDoc>,
+    deck_root: &std::path::Path,
+) -> anyhow::Result<()> {
+    for (_id, slide) in slides.iter_mut() {
+        if slide.component.name == "CodeSlide" {
+            if let Some(src) = slide.props.get("source").and_then(|v| v.as_object()) {
+                let src_type = src.get("type").and_then(|v| v.as_str()).unwrap_or("");
+                if src_type == "git" {
+                    let rref = src.get("ref").and_then(|v| v.as_str()).unwrap_or("");
+                    let file = src.get("file").and_then(|v| v.as_str()).unwrap_or("");
+                    if !file.is_empty() && !rref.is_empty() {
+                        // git show to get content
+                        let out = std::process::Command::new("git")
+                            .arg("-C").arg(deck_root)
+                            .arg("show").arg(format!("{}:{}", rref, file))
+                            .output()?;
+                        if out.status.success() {
+                            let full = String::from_utf8_lossy(&out.stdout).to_string();
+                            let content = if let Some(lines_spec) = src.get("lines").and_then(|v| v.as_str()) {
+                                extract_lines(&full, lines_spec)?
+                            } else { full };
+                            // Inject into props.content
+                            if let Some(obj) = slide.props.as_object_mut() {
+                                obj.insert("content".to_string(), serde_json::Value::String(content));
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Health check endpoint
@@ -382,6 +422,83 @@ async fn test_markdown_sanitization(
         "sanitized": sanitized_html,
         "strict_mode": state.sanitization_config.strict_mode
     }))
+}
+
+#[derive(Deserialize)]
+struct CodeResolveRequest {
+    repo: Option<String>,
+    r#ref: String,
+    file: String,
+    lines: Option<String>,
+}
+
+async fn code_resolve(
+    State(state): State<AppState>,
+    Json(req): Json<CodeResolveRequest>,
+) -> Result<Json<serde_json::Value>, StatusCode> {
+    // Enforce local repo only
+    let deck_root = {
+        let guard = state.deck_root.read().await;
+        guard.clone().ok_or(StatusCode::BAD_REQUEST)?
+    };
+
+    // Basic path validation: disallow traversal
+    if req.file.contains("..") { return Err(StatusCode::BAD_REQUEST); }
+
+    // Build git command under deck root
+    let show_output = std::process::Command::new("git")
+        .arg("-C").arg(&deck_root)
+        .arg("show").arg(format!("{}:{}", &req.r#ref, &req.file))
+        .output()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !show_output.status.success() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let content_all = String::from_utf8_lossy(&show_output.stdout).to_string();
+
+    // Blob hash
+    let revparse = std::process::Command::new("git")
+        .arg("-C").arg(&deck_root)
+        .arg("rev-parse").arg(format!("{}:{}", &req.r#ref, &req.file))
+        .output()
+        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    if !revparse.status.success() {
+        return Err(StatusCode::NOT_FOUND);
+    }
+    let blob_hash = String::from_utf8_lossy(&revparse.stdout).trim().to_string();
+
+    let content = if let Some(spec) = req.lines.as_ref() {
+        match extract_lines(&content_all, spec) {
+            Ok(s) => s,
+            Err(_) => return Err(StatusCode::BAD_REQUEST),
+        }
+    } else {
+        content_all
+    };
+
+    Ok(Json(serde_json::json!({
+        "content": content,
+        "blobHash": blob_hash,
+    })))
+}
+
+fn extract_lines(content: &str, spec: &str) -> anyhow::Result<String> {
+    let lines: Vec<&str> = content.split('\n').collect();
+    let mut out: Vec<String> = Vec::new();
+    for part in spec.split(',') {
+        let p = part.trim();
+        if p.is_empty() { continue; }
+        if let Some((a,b)) = p.split_once('-') {
+            let start: usize = a.trim().parse()?;
+            let end: usize = b.trim().parse()?;
+            let s = start.max(1); let e = end.max(s);
+            for i in s..=e { if let Some(line) = lines.get(i-1) { out.push((*line).to_string()); } }
+        } else {
+            let idx: usize = p.parse()?;
+            if let Some(line) = lines.get(idx.saturating_sub(1)) { out.push((*line).to_string()); }
+        }
+    }
+    Ok(out.join("\n"))
 }
 
 /// Get import map for package resolution

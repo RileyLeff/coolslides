@@ -45,44 +45,54 @@ export class SlideRouter implements Router {
 
     // Keyboard navigation
     document.addEventListener('keydown', (e) => {
-      switch (e.key) {
-        case 'ArrowRight':
-          e.preventDefault();
-          this.nextFragment() || this.nextSlide();
-          break;
-        case ' ':
-          e.preventDefault();
-          if (e.shiftKey) {
-            this.prevFragment() || this.prevSlide();
-          } else {
+      const run = async () => {
+        switch (e.key) {
+          case 'ArrowRight':
+            e.preventDefault();
+            if (await this.tryActiveSlideAdvance('forward')) return;
             this.nextFragment() || this.nextSlide();
-          }
-          break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          this.prevFragment() || this.prevSlide();
-          break;
-        case 'Home':
-          e.preventDefault();
-          this.firstSlide();
-          break;
-        case 'End':
-          e.preventDefault();
-          this.lastSlide();
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          this.nextFragment();
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          this.prevFragment();
-          break;
-        case '?':
-          e.preventDefault();
-          this.showKeyboardHelp();
-          break;
-      }
+            break;
+          case ' ':
+            e.preventDefault();
+            if (e.shiftKey) {
+              if (await this.tryActiveSlideAdvance('backward')) return;
+              this.prevFragment() || this.prevSlide();
+            } else {
+              if (await this.tryActiveSlideAdvance('forward')) return;
+              this.nextFragment() || this.nextSlide();
+            }
+            break;
+          case 'ArrowLeft':
+            e.preventDefault();
+            if (await this.tryActiveSlideAdvance('backward')) return;
+            this.prevFragment() || this.prevSlide();
+            break;
+          case 'Home':
+            e.preventDefault();
+            this.firstSlide();
+            break;
+          case 'End':
+            e.preventDefault();
+            this.lastSlide();
+            break;
+          case 'ArrowDown':
+            e.preventDefault();
+            if (await this.tryActiveSlideAdvance('forward')) return;
+            this.nextFragment();
+            break;
+          case 'ArrowUp':
+            e.preventDefault();
+            if (await this.tryActiveSlideAdvance('backward')) return;
+            this.prevFragment();
+            break;
+          case '?':
+            e.preventDefault();
+            this.showKeyboardHelp();
+            break;
+        }
+      };
+      // fire-and-forget async to allow awaiting component onAdvance hooks
+      run();
     });
   }
 
@@ -258,7 +268,34 @@ export class SlideRouter implements Router {
     }
   }
 
+  // Try letting active slide components consume the advance
+  private async tryActiveSlideAdvance(dir: 'forward' | 'backward'): Promise<boolean> {
+    const slideId = this.currentSlideId;
+    if (!slideId) return false;
+    const activeSlideEl = document.querySelector(`[data-slide="${slideId}"]`);
+    if (!activeSlideEl) return false;
 
+    // Walk custom elements within the active slide
+    const elements = Array.from(activeSlideEl.querySelectorAll('*')) as any[];
+    for (const el of elements) {
+      const fn = (el as any).onAdvance as any;
+      if (typeof fn === 'function') {
+        try {
+          const consumed = fn.call(el, dir, { bus: this.bus, router: this, slideId });
+          if (consumed && typeof consumed.then === 'function') {
+            if (await consumed) return true;
+          } else if (consumed) {
+            return true;
+          }
+        } catch (e) {
+          console.warn('onAdvance handler error:', e);
+        }
+      }
+    }
+    return false;
+  }
+
+  
   private showKeyboardHelp(): void {
     this.bus.emit('keyboard:help');
   }
