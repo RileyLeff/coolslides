@@ -48,6 +48,7 @@ class NotesPlugin {
   private slideStartTime: number | null = null;
   private notesOverlay: HTMLElement | null = null;
   private keyboardShortcuts: Map<string, () => void> = new Map();
+  private boundKeydown: ((event: KeyboardEvent) => void) | null = null;
 
   async init(ctx: PluginContext): Promise<void> {
     this.context = ctx;
@@ -78,7 +79,8 @@ class NotesPlugin {
     this.keyboardShortcuts.set('t', () => this.showTimingInfo());
     this.keyboardShortcuts.set('p', () => this.togglePracticeMode());
     
-    document.addEventListener('keydown', this.handleKeydown.bind(this));
+    this.boundKeydown = this.handleKeydown.bind(this);
+    document.addEventListener('keydown', this.boundKeydown);
   }
 
   private handleKeydown(event: KeyboardEvent): void {
@@ -236,6 +238,12 @@ class NotesPlugin {
     this.notesOverlay.innerHTML = this.renderNotesOverlay();
     
     document.body.appendChild(this.notesOverlay);
+
+    // Wire close button to proper teardown
+    const closeBtn = this.notesOverlay.querySelector('.notes-close');
+    if (closeBtn) {
+      closeBtn.addEventListener('click', () => this.hideNotesOverlay());
+    }
     
     // Close on escape key
     const closeHandler = (event: KeyboardEvent) => {
@@ -377,7 +385,7 @@ class NotesPlugin {
       
       <div class="notes-header">
         <h3 class="notes-title">Speaker Notes</h3>
-        <button class="notes-close" onclick="this.closest('.coolslides-notes-overlay').remove()">×</button>
+        <button class="notes-close">×</button>
       </div>
       
       <div class="slide-info" id="slide-info">Loading...</div>
@@ -504,7 +512,10 @@ class NotesPlugin {
 
   teardown(): void {
     this.hideNotesOverlay();
-    document.removeEventListener('keydown', this.handleKeydown);
+    if (this.boundKeydown) {
+      document.removeEventListener('keydown', this.boundKeydown);
+      this.boundKeydown = null;
+    }
     
     if (this.currentSession) {
       this.saveSession();

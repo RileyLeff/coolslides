@@ -299,12 +299,10 @@ export class CodeSlide extends CoolslidesElement {
         <div class="code-container">
           <div class="code-header">
             <span class="language-label">${this.language}</span>
-            <span>${this.code.split('\\n').length} lines</span>
+            <span>${this.code.split('\n').length} lines</span>
           </div>
           
-          <div class="code-content">
-            <pre><code>${highlightedCode}</code></pre>
-          </div>
+          <div class="code-content">${this.lineNumbers ? highlightedCode : `<pre><code>${highlightedCode}</code></pre>`}</div>
         </div>
       </div>
     `;
@@ -356,26 +354,41 @@ export class CodeSlide extends CoolslidesElement {
         return `
           .code-content { background: #272822; color: #f8f8f2; }
           .code-header { background: #3e3d32; color: #a6e22e; }
+          .keyword { color: #f92672; font-weight: 600; }
+          .string { color: #e6db74; }
+          .comment { color: #75715e; font-style: italic; }
         `;
       case 'solarized-dark':
         return `
           .code-content { background: #002b36; color: #839496; }
           .code-header { background: #073642; color: #586e75; }
+          .keyword { color: #b58900; font-weight: 600; }
+          .string { color: #2aa198; }
+          .comment { color: #586e75; font-style: italic; }
         `;
       case 'solarized-light':
         return `
           .code-content { background: #fdf6e3; color: #657b83; }
           .code-header { background: #eee8d5; color: #93a1a1; }
+          .keyword { color: #cb4b16; font-weight: 600; }
+          .string { color: #2aa198; }
+          .comment { color: #93a1a1; font-style: italic; }
         `;
       case 'vs-code':
         return `
           .code-content { background: #1e1e1e; color: #d4d4d4; }
           .code-header { background: #2d2d30; color: #cccccc; }
+          .keyword { color: #c586c0; font-weight: 600; }
+          .string { color: #ce9178; }
+          .comment { color: #6a9955; font-style: italic; }
         `;
       default: // github
         return `
           .code-content { background: #f8f9fa; color: #24292e; }
           .code-header { background: #f1f3f4; color: #586069; }
+          .keyword { color: #d73a49; font-weight: 600; }
+          .string { color: #032f62; }
+          .comment { color: #6a737d; font-style: italic; }
         `;
     }
   }
@@ -497,7 +510,7 @@ class SyntaxHighlighter {
   }
 
   private addLineNumbers(code: string, highlightLines: number[]): string {
-    const lines = code.split('\\n');
+    const lines = code.split('\n');
     const numberedLines = lines.map((line, index) => {
       const lineNumber = index + 1;
       const isHighlighted = highlightLines.includes(lineNumber);

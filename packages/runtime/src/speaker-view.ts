@@ -30,14 +30,6 @@ export class DefaultSpeakerView implements SpeakerView {
         this.update();
       }
     });
-
-    // Handle keyboard shortcut to open speaker view
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 's' && e.metaKey) { // Cmd/Ctrl + S
-        e.preventDefault();
-        this.toggle();
-      }
-    });
   }
 
   open(): void {
@@ -63,7 +55,8 @@ export class DefaultSpeakerView implements SpeakerView {
     }
 
     this.initializeSpeakerWindow();
-    this.timer = new SpeakerTimer();
+    this.timer = new SpeakerTimer(this.speakerWindow.document);
+    this.timer.start();
     this.update();
   }
 
@@ -443,7 +436,12 @@ export class DefaultSpeakerView implements SpeakerView {
 
 class SpeakerTimer {
   private startTime: number | null = null;
-  private intervalId: NodeJS.Timeout | null = null;
+  private intervalId: number | ReturnType<typeof setInterval> | null = null;
+  private doc: Document | null;
+
+  constructor(doc: Document | null = null) {
+    this.doc = doc;
+  }
 
   start(): void {
     if (this.startTime) return; // Already started
@@ -477,7 +475,8 @@ class SpeakerTimer {
     const display = `${hours.toString().padStart(2, '0')}:${(minutes % 60).toString().padStart(2, '0')}:${(seconds % 60).toString().padStart(2, '0')}`;
     
     // Update timer display in speaker window
-    const timerElements = document.querySelectorAll('#timer');
+    const scope: Document = (this.doc || document);
+    const timerElements = scope.querySelectorAll('#timer');
     timerElements.forEach(el => {
       el.textContent = display;
     });

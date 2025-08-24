@@ -68,7 +68,7 @@ class TelemetryPlugin {
   private sessionId: string;
   private events: TelemetryEvent[] = [];
   private performanceObserver: PerformanceObserver | null = null;
-  private flushTimer: NodeJS.Timeout | null = null;
+  private flushTimer: number | ReturnType<typeof setInterval> | null = null;
   private slideStartTime: number | null = null;
   private lastInteractionTime: number = Date.now();
 

@@ -21,19 +21,36 @@ export function component(manifest: Partial<ComponentManifest>) {
 
 // Method decorator for event handlers
 export function eventHandler(eventType: string) {
-  return function (_target: any, _propertyKey: string, descriptor: PropertyDescriptor) {
-    const originalMethod = descriptor.value;
-    
-    descriptor.value = function (this: HTMLElement, ...args: any[]) {
-      // Bind event listener when component connects
-      if (!this.hasAttribute('data-event-handlers-bound')) {
-        this.addEventListener(eventType, originalMethod.bind(this));
-        this.setAttribute('data-event-handlers-bound', 'true');
+  return function (target: any, propertyKey: string, descriptor: PropertyDescriptor) {
+    const handlerKey = `__coolslides_bound_${propertyKey}`;
+
+    const connected = target.connectedCallback;
+    target.connectedCallback = function (...args: any[]) {
+      // Ensure prior connectedCallback logic runs
+      if (typeof connected === 'function') {
+        connected.apply(this, args);
       }
-      
-      return originalMethod.apply(this, args);
+      // Bind once per instance
+      if (!this[handlerKey]) {
+        this[handlerKey] = descriptor.value.bind(this);
+        this.addEventListener(eventType, this[handlerKey]);
+      }
     };
-    
+
+    const disconnected = target.disconnectedCallback;
+    target.disconnectedCallback = function (...args: any[]) {
+      try {
+        if (this[handlerKey]) {
+          this.removeEventListener(eventType, this[handlerKey]);
+          this[handlerKey] = null;
+        }
+      } finally {
+        if (typeof disconnected === 'function') {
+          disconnected.apply(this, args);
+        }
+      }
+    };
+
     return descriptor;
   };
 }

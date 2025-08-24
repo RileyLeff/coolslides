@@ -3,14 +3,36 @@
  */
 
 import { EventBus, RuntimeContext } from './types.js';
-import { RoomsClient } from './rooms.js';
 
 export type CapabilityMap = {
-  'network.fetch'?: (input: RequestInfo, init?: RequestInit) => Promise<Response>;
-  'storage.kv'?: (ns: string) => { get(key: string): any; set(key: string, val: any): void; remove(key: string): void };
-  'ui.notifications'?: { show(message: string): void };
-  'rooms.ws'?: RoomsClient;
-  'telemetry.events'?: { emit: (name: string, data?: any) => void };
+  // Expose as object with fetch method; keep callable form internally for compat
+  'network.fetch'?: any;
+  // Promise-based storage with list()
+  'storage.kv'?: (ns: string) => {
+    get(key: string): Promise<any>;
+    set(key: string, val: any): Promise<void>;
+    remove(key: string): Promise<void>;
+    list(): Promise<string[]>;
+  };
+  // Rich notifications + toast API
+  'ui.notifications'?: {
+    show(message: string): void;
+    notification(title: string, body?: string, opts?: any): void;
+    toast(message: string, type?: 'info' | 'success' | 'warning' | 'error'): void;
+  };
+  // Back-compat alias expected by some plugins
+  'ui.toast'?: { toast(message: string, type?: 'info' | 'success' | 'warning' | 'error'): void };
+  // WebSocket wrapper factory as expected by plugins
+  'rooms.ws'?: {
+    connect(roomId: string): {
+      send(data: any): void;
+      onMessage(cb: (data: any) => void): void;
+      onClose(cb: () => void): void;
+      close(): void;
+    };
+  };
+  // Telemetry event sink
+  'telemetry.events'?: { track: (name: string, props?: any) => void; identify: (id: string, props?: any) => void; page: (name: string, props?: any) => void };
 };
 
 export interface PluginModule {
@@ -23,13 +45,11 @@ export class PluginManager {
   private bus: EventBus;
   private context: RuntimeContext;
   private importMap: Record<string, string>;
-  private rooms: RoomsClient;
 
-  constructor(context: RuntimeContext, bus: EventBus, importMap: Record<string, string>, rooms: RoomsClient) {
+  constructor(context: RuntimeContext, bus: EventBus, importMap: Record<string, string>) {
     this.context = context;
     this.bus = bus;
     this.importMap = importMap;
-    this.rooms = rooms;
   }
 
   async loadAll(specs: string[]): Promise<void> {
@@ -47,28 +67,69 @@ export class PluginManager {
 
   private async initialize(plugin: PluginModule): Promise<void> {
     const caps: CapabilityMap = {
-      'network.fetch': (input: RequestInfo, init?: RequestInit) => fetch(input, init),
-      'storage.kv': (ns: string) => this.makeKV(ns),
-      'ui.notifications': { show: (m: string) => this.showToast(m) },
-      'rooms.ws': this.rooms,
-      'telemetry.events': { emit: (name: string, data?: any) => this.bus.emit(`telemetry:${name}`, data) },
+      // Provide object form with fetch method; also keep callable behavior
+      'network.fetch': Object.assign(
+        (input: RequestInfo, init?: RequestInit) => fetch(input, init),
+        { fetch: (url: string, init?: RequestInit) => fetch(url, init) }
+      ),
+      'storage.kv': (ns: string) => this.makeAsyncKV(ns),
+      'ui.notifications': {
+        show: (m: string) => this.showToast(m),
+        notification: (title: string, body?: string) => this.showToast(`${title}${body ? ': ' + body : ''}`),
+        toast: (m: string) => this.showToast(m),
+      },
+      'ui.toast': { toast: (m: string) => this.showToast(m) },
+      'rooms.ws': {
+        connect: (roomId: string) => this.makeWsConnection(roomId),
+      },
+      'telemetry.events': {
+        track: (name: string, props?: any) => this.bus.emit('telemetry:track', { name, props }),
+        identify: (id: string, props?: any) => this.bus.emit('telemetry:identify', { id, props }),
+        page: (name: string, props?: any) => this.bus.emit('telemetry:page', { name, props }),
+      },
     };
     if (plugin.init) {
       await plugin.init({ context: this.context, bus: this.bus, capabilities: caps });
     }
   }
 
-  private makeKV(ns: string) {
+  private makeAsyncKV(ns: string) {
     const prefix = `coolslides:${ns}::`;
     return {
-      get: (key: string) => {
+      async get(key: string) {
         const v = localStorage.getItem(prefix + key);
         try { return v ? JSON.parse(v) : null; } catch { return v; }
       },
-      set: (key: string, val: any) => {
+      async set(key: string, val: any) {
         try { localStorage.setItem(prefix + key, JSON.stringify(val)); } catch { /* noop */ }
       },
-      remove: (key: string) => { localStorage.removeItem(prefix + key); },
+      async remove(key: string) {
+        localStorage.removeItem(prefix + key);
+      },
+      async list() {
+        const keys: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i)!;
+          if (k.startsWith(prefix)) keys.push(k.slice(prefix.length));
+        }
+        return keys;
+      }
+    };
+  }
+
+  private makeWsConnection(roomId: string) {
+    const url = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/rooms/${encodeURIComponent(roomId)}`;
+    const ws = new WebSocket(url);
+    const handlers: { msg?: (d: any) => void; close?: () => void } = {};
+    ws.onmessage = (evt) => {
+      try { handlers.msg?.(JSON.parse(evt.data)); } catch { /* noop */ }
+    };
+    ws.onclose = () => { handlers.close?.(); };
+    return {
+      send: (data: any) => { if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(data)); },
+      onMessage: (cb: (d: any) => void) => { handlers.msg = cb; },
+      onClose: (cb: () => void) => { handlers.close = cb; },
+      close: () => ws.close(),
     };
   }
 

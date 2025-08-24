@@ -11,7 +11,7 @@ versionReq = "^1"
 quote = "I don't care much for powerpoint. So I made this."
 author = "Riley Leff"
 attribution = "Nitpicky Guy"
-style = "default"
+variant = "default"
 
 [styleOverrides]
 "--quote-color" = "#333333"
