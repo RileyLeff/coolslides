@@ -1,420 +1,351 @@
-Title: Coolslides Project Plan
+Title: Coolslides Project Plan (Rev. 2025-08-24)
 
 Overview
-This plan documents the next phases for Coolslides with a pro-first, hackable architecture, keeping TOML as the single authoring format. Simplicity for non‑technical users will come later via a UI; today we focus on rock-solid APIs, CLI workflows, and an ecosystem that lets pros build, share, and compose slides, components, plugins, and themes.
+This plan tracks what is done, what needs fixing, and what’s next for Coolslides. We keep TOML as the single authoring format, focus on a rock‑solid IR, CLI and runtime, and deliver a pro‑first, hackable system with deterministic exports.
 
 Guiding principles
-- One authoring format: TOML (SlideDoc and DeckManifest). Avoid multiple equivalent authoring paths.
-- Separation of concerns: IR/TOML is canonical; runtime is modular; plugins add behavior; themes/tokens handle look-and-feel; devserver provides author-time conveniences (e.g., git-sourced code).
-- Infinite hackability: Provide primitives and extension points (onAdvance, Transition Orchestrator, StageManager, capability-scoped plugins) that let users build anything, including 2D/3D “big-canvas” style transitions, without forcing that model on everyone.
-- Ecosystem-first: Git-based “taps” (registries) for components, widgets, plugins, themes/tokens, slides, templates. Determinism via a lockfile with SRI.
-- Pros-first UX: CLI scaffolding and schema-derived TOML generation. A later GUI should build on the same manifests, import maps, and lockfiles.
+- One authoring format: TOML for SlideDoc and DeckManifest.
+- Separation of concerns: IR/TOML is canonical; runtime modular; plugins add behavior; themes/tokens handle look‑and‑feel; devserver provides author‑time conveniences.
+- Infinite hackability: first‑class onAdvance, transition orchestrator, persistent stages, scoped capabilities.
+- Determinism and security: import maps + lockfile with SRI; strict/offline policies degrade gracefully.
 
-Scope at a glance
-- Marketplace (taps) and lockfile SRI
-- CLI: init/new/add/publish/search; scaffold TOML from component schemas; --no-git flag
-- CodeSlide v2: stepper + git-sourced ranges; robust syntax-highlighting integration
-- Math plugin (KaTeX), Overview mode plugin
-- Transition Orchestrator and component onAdvance hook; default transitions
-- StageManager; 2D Pan/Zoom and Three.js transition drivers (plugins)
-- Rooms sync for steps and transitions
-- Deterministic exports (embed code content, SRI)
-- Later: Component Playground, simple UI
+Status at a glance
+- Completed:
+  - A1 Capability adapters implemented and documented (docs/capabilities.md).
+  - A2 CLI init/new/add/dev/validate/export implemented; templates present; lockfile skeleton created; import map detection; --open supported.
+  - A4 CodeSlide v2 implemented: devserver git resolve; onAdvance stepper; export embeds resolved content; docs added.
+  - A5 Math plugin initial implementation + sanitizer “allow_math” path; docs added.
+  - B1 onAdvance router integration implemented.
+  - Dev/demo decks: examples/basic-deck and examples/showcase working; PDF/HTML export implemented.
 
-Non-goals (now)
-- Alternative authoring formats (e.g., Markdown as canonical). We keep TOML only.
-- Global “slides-as-one-canvas” core. We provide a transition driver that can achieve this, but don’t impose it.
+- In progress / requires polish:
+  - A4 CodeSlide styling/overflow + syntax highlighting add‑on.
+  - A5 Math plugin reliability; KaTeX packaging guidance.
+  - A3 Taps/registry and lockfile SRI integration (not started).
+  - B2/B3 Transition Orchestrator + StageManager (not started).
+  - B6 Rooms sync for steps/fragments/transitions (partial; slide sync only).
 
-Milestones
-A. Ecosystem/Dev UX foundation
-B. Advanced transitions and staging
-C. Polishing and later UI
-
-Each task below includes instructions, file paths, and acceptance criteria.
+- Hot issues to fix (high priority):
+  - Poll plugin rooms interop: adapter currently sends raw JSON; devserver expects RoomMessage::Event. Messages are not round‑tripping across clients.
+  - PollWidget print snapshot uses bus.emit incorrectly (emit returns void).
+  - Devserver should serve deck-local theme/token assets to eliminate tokens.css 404s when using deck-local paths.
+  - Docs/CLI mismatch for export html flags.
+  - Lockfile schema and docs need alignment and SRI work.
 
 -------------------------------------------------------------------------------
 
 Milestone A: Ecosystem and Pro Developer UX
 
-A1. Capability adapters (verify and document)
-Context
-- We’ve added capability adapters in packages/runtime/src/plugins.ts to align stdlib plugins and runtime.
+A1. Capability adapters (DONE)
+- Implemented in `packages/runtime/src/plugins.ts`.
+- Docs: `docs/capabilities.md`.
 
-Tasks
-- Verify adapters cover:
-  - 'network.fetch' as object with fetch method (and callable compat)
-  - 'storage.kv' async get/set/remove/list with namespacing
-  - 'ui.notifications' show/notification/toast and alias 'ui.toast'
-  - 'rooms.ws' connect(roomId) -> { send, onMessage, onClose, close }
-  - 'telemetry.events' track/identify/page mapped to bus
-- Add docs with examples (docs/capabilities.md).
-- Add smoke tests: load stdlib poll/notes/telemetry in examples/basic-deck and verify no runtime errors.
+A2. CLI: init/new/add/dev/validate/export (DONE; add polish)
+Polish/fixes
+- Fix docs/DEMO and README export invocation:
+  - Current CLI expects: `coolslides export html <out-dir> --strict=<bool>`.
+  - Update docs to avoid `--dir` flag and use positional dir for HTML export.
+- Validate that `coolslides export html` rewrites `/packages/...` to `./packages/...` (already done) and add a note that Chrome/Chromium is required for PDF.
+- Ensure `coolslides init --template` copies the template import map if present and always writes `importmap.json`.
 
 Acceptance
-- All stdlib plugins initialize and run; poll responses bridge DOM->bus; telemetry emits events; notes overlay toggles and persists.
+- Commands and flags in README.md and `docs/DEMO.md` match the CLI behavior; quick start works copy‑paste.
 
 Files
-- packages/runtime/src/plugins.ts
-- packages/plugins-stdlib/* (for manual verification)
-- docs/capabilities.md (new)
+- `README.md`, `docs/DEMO.md`.
+- (optional) Minor CLI help text tweaks in `apps/cli/src/main.rs`.
 
-A2. CLI: init, new, add, and --no-git
+A3. Marketplace “taps” (registry) + lockfile SRI (NEW)
 Context
-- CLI commands exist but are placeholders.
+- Registry and SRI have not been implemented. `docs/taps.md` and `docs/lockfile.md` missing.
+- IR Lockfile type supports integrity per resolved package, but exports don’t compute/store SRI yet.
 
 Tasks
-- Implement coolslides init:
-  - Flags: --template, --dir, --no-git
-  - Creates repo structure with slides.toml, content/*.slide.toml (use schema placeholders), themes, tokens, importmap, and .coolslides.lock skeleton.
-  - Starts dev server if --open passed via dev command.
-- Implement coolslides new slide:
-  - --component <Name>, --id <slide-id>, optional --from-schema path or registry id
-  - Prompt (or accept defaults) for required props from manifest JSON schema
-  - Generate content/<id>.slide.toml with filled props and commented optional props; create slot stubs.
-- Implement coolslides add:
-  - coolslides add component <pkg-spec>
-  - coolslides add plugin <pkg-spec>
-  - Update import map, lockfile, and (optionally) generate a sample slide TOML if component.
-- Implement --no-git for init to skip git repo creation.
+- Define tap manifest and index format; write `docs/taps.md`.
+- Implement CLI:
+  - `coolslides tap add <git-url-or-gh:org/repo>`
+  - `coolslides search <query> [type:, tag:]`
+  - `coolslides publish <type> <path> --tap <repo>` (build, hash assets, write manifest, open PR).
+- Implement SRI hashing:
+  - Compute SRI for JS/CSS in import map on export/init/add.
+  - For CodeSlide external code, store blob hash and a content hash in lockfile.
+- Generate and persist `.coolslides.lock` with integrity and source info; document in `docs/lockfile.md`.
 
 Acceptance
-- From an empty dir, coolslides init creates a runnable deck; coolslides dev --open shows a preview; coolslides new slide creates TOML with schema-driven defaults; add commands add items to import map and lockfile.
+- Can add/search a git tap; publish a sample plugin/component manifest with SRI; lockfile persists SRI and tap info; exporters honor lockfile hashes.
 
 Files
-- apps/cli/src/main.rs
-- Add helpers in apps/devserver or packages/coolslides_core if needed to load schemas.
+- `apps/cli/src/main.rs` (new subcommands and helpers).
+- `docs/taps.md`, `docs/lockfile.md`.
 
-A3. Marketplace “taps” (registry) - phase 1 (backend-less git)
+A4. CodeSlide v2 polish (ONGOING)
 Context
-- Git-based taps with index.json; curated/public/private taps.
+- Core flow is implemented. Styling and UX polish pending.
 
 Tasks
-- Define manifest schema for tap entries (docs/taps.md), including:
-  - id, type (component, widget, plugin, theme, tokens, slide, template), version, description, tags, compatibility { runtime, ir }, capabilities (plugins), assets { module, styles }, demo, screenshots, license, integrity, signatures (optional).
-- CLI commands:
-  - coolslides tap add <git-url-or-gh:org/repo>
-  - coolslides search <query> [filters: type:, tag:]
-  - coolslides publish <type> <path> --tap <repo> (build, generate manifest with SRI, open PR)
-- Lockfile updates:
-  - .coolslides.lock: add SRI for JS/CSS; pin resolved URLs; record source tap and ref.
-- Minimal index.json format for taps.
+- Add props: `wrap: "on"|"off"`, `overflowX: "scroll"|"hidden"`, `fitMode: "shrink"` with min/max font sizes.
+- Dim unfocused lines in steps; improve auto-scroll accuracy.
+- Syntax highlighting add‑on:
+  - Provide optional Prism.js/highlight.js package (e.g., `@coolslides/highlight-prism`) with theme CSS.
+  - Load when present; fallback to current lightweight highlighter.
 
 Acceptance
-- Able to add a tap (local or GitHub), search it, and publish a sample component/plugin with a PR-ready manifest. Lockfile contains SRI and URLs.
+- Long lines don’t overflow by default; optional wrap and scroll behaviors configurable via props; stepping dims non‑highlight lines; Prism add‑on works when installed, with deterministic output on export.
 
 Files
-- apps/cli/src/main.rs (new subcommands)
-- docs/taps.md (new)
-- .coolslides.lock (schema documented in docs/lockfile.md)
+- `packages/components/src/slides/CodeSlide.ts`
+- New package: `packages/highlight-prism` (or add-on within components).
 
-A4. CodeSlide v2: stepper and git-sourced code ranges
+A5. Math plugin hardening (ONGOING)
 Context
-- We want to reference code by repo/ref/file and line ranges, not inline code in TOML.
-
-Authoring (TOML)
-[props]
-title = "Routing logic"
-language = "ts"
-source.type = "git"
-source.repo = "./"                  # local repo root (deck root by default)
-source.ref = "a1b2c3d"              # branch/tag/sha
-source.file = "src/router.ts"
-source.lines = "120-180"            # or "1,4-6,9"
-steps = [
-  { highlight = "120-130", scrollTo = 120 },
-  { highlight = "132-140", scrollTo = 132 },
-  { highlight = "170-180", scrollTo = 170 }
-]
+- Math plugin works but intermittent non-render was observed. KaTeX packaging guidance needed.
 
 Tasks
-- Devserver API to resolve git source:
-  - POST /api/code/resolve { repo, ref, file, lines }
-  - Securely run git show <ref>:<path> under deck root; extract lines; return { content, blobHash }.
-  - Cache by (repo, ref, file, lines).
-- Runtime CodeSlide:
-  - If props.source present and no embedded content, fetch from devserver; else, use embedded content.
-  - Implement stepper: onAdvance(dir, ctx) that advances through steps (set highlight range, smooth scroll).
-  - Emit bus 'advance:step' with index for rooms sync.
-- Export:
-  - During export_deck_html_from_dir, embed resolved code content into slide props as props.content and record blob hash (and SRI) in lockfile.
-- Syntax highlighting:
-  - Integrate Prism.js or Highlight.js as an optional addon package (e.g., @coolslides/highlight-prism). Provide themes as tap packages. Keep the simple fallback highlighter for offline minimal builds.
+- Add debug logs behind a flag; ensure slide re-processing on slide:enter/leave always updates math.
+- Provide guidance or optional packaging for KaTeX CSS/JS (local assets for deterministic export) and update `docs/math.md`.
+- Ensure sanitizer path (`allow_math`) toggles reliably by checking deck plugins at runtime: already set in server; verify for nested/group slides.
 
 Acceptance
-- A CodeSlide in examples/basic-deck can reference a local repo file and a specific ref; dev server resolves and displays only the requested lines; advancing steps scrolls and updates highlights; export embeds the code content and prints deterministically; rooms syncs step changes.
+- Math reliably renders in dev and in HTML/PDF export; example deck includes KaTeX assets option with fully deterministic output.
 
 Files
-- apps/devserver/src/lib.rs (new endpoint handler)
-- packages/components/src/slides/CodeSlide.ts (props extension, onAdvance, fetching, rendering)
-- packages/runtime/src/types.ts (optional: declare onAdvance in a ComponentLifecycle extension doc; runtime side just calls it if present)
-- packages/coolslides_core (no IR change required; props is free-form)
-- docs/codeslide.md (new)
+- `packages/plugins-stdlib/src/math/index.ts`, `docs/math.md`.
+- (optional) theme/tap packaging for KaTeX assets.
 
-A5. Math plugin (KaTeX)
+A6. Overview mode plugin (NEW)
+Tasks
+- Implement `@coolslides/plugins-overview`:
+  - Hotkey `O` toggles an overlay with slide thumbnails; click navigates.
+  - Clone slide DOM for simple thumbs; obey prefers‑reduced‑motion.
+
+Acceptance
+- Overview grid opens with `O`, shows current deck; navigation works; overlay closes cleanly.
+
+Files
+- `packages/plugins-stdlib/src/overview/*`
+- Styling co-located with plugin.
+
+A7. Rooms adapter + poll interop (FIX)
 Context
-- Provide robust math typesetting.
+- Poll plugin uses capability `rooms.ws` and sends plain `{ type: 'poll:*', ... }`. The devserver rooms expects `RoomMessage::Event` with `{ type: 'event', event: { name, data, client_id }, timestamp }`. Currently poll messages won’t propagate across clients.
 
 Tasks
-- Devserver markdown sanitization: allow math spans/blocks pass-through safely behind a switch (strict mode continues to sanitize).
-- Plugin: @coolslides/plugins-math
-  - Loads KaTeX CSS/JS; processes inline $...$ and display $$...$$ after slide render.
-  - Provide plugin config in deck to enable/disable or set macros.
-- Export: Ensure KaTeX CSS is included for PDF determinism.
+- Update `packages/runtime/src/plugins.ts` rooms adapter:
+  - Wrap `send(data)` as a RoomMessage event if `data?.type` is not `'event'`:
+    - `ws.send(JSON.stringify({ type: 'event', event: { name: data.type, data, client_id: 'plugin' }, timestamp: Date.now() }))`.
+  - In `onMessage(cb)`, if incoming `msg.type === 'event'`, call `cb(msg.event.data ?? msg.event)` for convenience.
+- Optionally expose `sendEvent(name, data)` on the adapter wrapper.
+- Add a minimal note in `docs/capabilities.md` clarifying that messages go through RoomMessage::Event in devserver.
 
 Acceptance
-- Example slide with math renders in dev and in exported HTML/PDF; strict mode behavior documented.
+- Poll plugin start/stop/response propagate across tabs using the same room; results update in real time.
 
 Files
-- apps/devserver/src/lib.rs (render_markdown_to_html toggles for math or an extra pass phase)
-- packages/plugins-stdlib/src (new math plugin module)
-- themes/ or plugins package for KaTeX CSS (prefer packaged via tap)
+- `packages/runtime/src/plugins.ts`
+- `docs/capabilities.md`
 
-A6. Overview mode plugin
+A8. Devserver deck-local assets (FIX)
 Context
-- Grid of slide thumbnails for fast navigation.
+- tokens.css 404s can occur when decks rely on deck-local `themes/*` rather than repo-level `/themes`. Devserver currently only serves repo `/themes`.
 
 Tasks
-- Plugin @coolslides/plugins-overview:
-  - Hotkey 'O' toggles overlay with a grid of current slides.
-  - Clicking a thumbnail navigates to that slide.
-  - Thumbnails constructed by cloning existing slide DOM and scaling via CSS, or canvas snapshots (keep it simple first).
-  - Honors prefers-reduced-motion.
+- Serve the active deck directory under a prefix (e.g., `/deck`), and in dev HTML use:
+  - Theme href: relative path => `/deck/<relative>`
+  - Tokens href: relative path => `/deck/<relative>`
+- Keep absolute paths working as-is.
+- Update `generate_export_html` (dev path) to write `<link href="/deck/...">` for relative manifest paths.
 
 Acceptance
-- Pressing 'O' shows an overlay with navigable thumbnails; navigation works; overlay can be closed.
+- Editing deck-local theme and tokens is reflected in dev without 404s; both repo-level and deck-level assets work.
 
 Files
-- packages/plugins-stdlib/src/overview (new)
-- themes/default/theme.css or plugin CSS (scoped)
+- `apps/devserver/src/lib.rs`:
+  - Add `.nest_service("/deck", ServeDir::new(deck_root))`.
+  - In `generate_export_html` dev branch, prefix relative theme/tokens with `/deck/`.
 
 -------------------------------------------------------------------------------
 
-Milestone B: Advanced transitions and stages
+Milestone B: Transitions and Staging
 
-B1. Component-level onAdvance hook (infinite hackability entry point)
-Context
-- Before advancing slide/fragment, allow the active slide’s components to handle “next/prev”.
+B1. Component-level onAdvance (DONE)
+- Implemented in `packages/runtime/src/router.ts`; CodeSlide uses it.
 
+Follow-up
+- Document onAdvance in component SDK docs (optional), pointing to existing `docs/transitions.md`.
+
+B2. Transition Orchestrator (NEW)
 Tasks
-- Runtime router integration:
-  - On key events for forward/back, call tryActiveSlideAdvance(dir) before nextFragment/nextSlide.
-  - tryActiveSlideAdvance(dir): walks components in the active slide; if any expose onAdvance(dir, ctx) returning true (or resolving to true), stop; else proceed with router-based navigation.
-- Provide AdvanceContext { bus, router, slideId }.
-
-Acceptance
-- CodeSlide implements onAdvance and consumes “next” while steps remain; when done, router advances to the next fragment/slide.
-
-Files
-- packages/runtime/src/router.ts (call a helper before changing fragment/slide)
-- packages/components/src/slides/CodeSlide.ts (add onAdvance)
-
-B2. Transition Orchestrator with default handlers
-Context
-- A pluggable transition system that selects and runs a handler between slides.
-
-Tasks
-- Orchestrator module:
-  - API: register(handler, match?), run(fromId, toId, ctx)
-  - Default handlers: none, fade, slide, zoom, FLIP (wrap existing FLIPAutoAnimateManager for a stock case).
-  - DeckManifest.transitions.overrides can choose a handler by name per slide id.
+- New module `transitions.ts`:
+  - API: `register(name, handler, matchFn?)`, `run(fromId, toId, ctx)`.
+  - Default handlers: `none`, `fade`, `slide`, `zoom`, plus a wrapper that leverages `FLIPAutoAnimateManager` for auto‑animate slides.
 - Router integration:
-  - navigate() awaits orchestrator.run() before marking navigation complete and accepting next key.
+  - Await orchestrator before finalizing navigation and accepting next input.
 
 Acceptance
-- Configure default transition = 'fade' in examples/basic-deck; switching slides runs fade; switching to a slide with override='zoom' runs zoom.
+- Set `transitions.default = "fade"` in a deck; fades occur globally; per-slide overrides supported.
 
 Files
-- packages/runtime/src/transitions.ts (new)
-- packages/runtime/src/router.ts (await orchestrator)
+- `packages/runtime/src/transitions.ts`
+- `packages/runtime/src/router.ts` (integration)
 
-B3. StageManager (persistent layers)
+B3. StageManager (NEW)
+Tasks
+- Introduce `stage.ts` with:
+  - `mountLayer(id, factory, zIndex)`, `getLayer`, `unmountLayer`.
+  - Fixed-position container above slides; cleans up on unload; respects reduced motion.
+
+Acceptance
+- A sample layer mounts and persists across slides; unmounts cleanly.
+
+Files
+- `packages/runtime/src/stage.ts`
+- `docs/transitions.md` update.
+
+B4. 2D pan/zoom driver plugin (NEW)
+Tasks
+- Plugin `@coolslides/plugins-transition-2d`:
+  - Read slide meta anchors (e.g., `camera2D { x, y, scale }`).
+  - Tween between anchors using StageManager or DOM transforms.
+
+Acceptance
+- Demo deck shows smooth 2D camera transitions (instant when reduced motion is on).
+
+Files
+- `packages/plugins-stdlib/src/transition-2d/*`
+- `docs/slide-meta.md` (anchors)
+
+B5. Three.js transition driver plugin (NEW)
+Tasks
+- Plugin `@coolslides/plugins-transition-three`:
+  - Mount WebGL layer with StageManager; tween camera between slide targets.
+
+Acceptance
+- Demo shows 3D camera flights between slides; DOM fade correctly synchronized.
+
+Files
+- `packages/plugins-stdlib/src/transition-three/*`
+- `examples/three-demo/*`
+
+B6. Rooms sync for steps/fragments/transitions (NEW)
 Context
-- Long-running layers (e.g., canvases) used by advanced transitions.
+- Current runtime broadcasts slide changes only.
 
 Tasks
-- StageManager API:
-  - mountLayer(id, factory, zIndex?)
-  - getLayer(id), unmountLayer(id)
-  - Manages fixed-positioned elements appended to body, above slide content.
-- Lifecycle: ensure unmount on unload, and respect prefers-reduced-motion.
+- Emit and forward:
+  - `advance:step` with `{ slideId, stepIndex }` when onAdvance consumes a step (CodeSlide).
+  - Fragment updates: emit `fragment:change` and forward over rooms.
+  - Transition lifecycle: `transition:begin/end { from, to, type }`.
+- On audience side, ignore local navigation during an active transition.
 
 Acceptance
-- A sample plugin mounts a layer and animates on transition; layer persists across slides.
+- In two tabs in the same room, CodeSlide steps stay in sync; fragment reveals stay in sync; long transitions play in both.
 
 Files
-- packages/runtime/src/stage.ts (new)
-- docs/transitions.md (document Orchestrator and StageManager)
-
-B4. 2D Pan/Zoom driver plugin
-Context
-- Provide a lightweight “big-canvas” style pan/zoom driver.
-
-Tasks
-- Plugin @coolslides/plugins-transition-2d:
-  - Uses StageManager to mount a canvas or use CSS transforms on slides container.
-  - Slide meta optionally supplies camera2D { x, y, scale } anchors; transition tweens between anchors.
-  - Honors prefers-reduced-motion; short-circuits with instant change.
-
-Acceptance
-- Slides with meta.camera2D define positions; transitions tween between positions; test with a small demo deck.
-
-Files
-- packages/plugins-stdlib/src/transition-2d (new)
-- docs/slide-meta.md (document anchors)
-
-B5. Three.js transition driver plugin
-Context
-- Without enforcing “one big canvas” globally, allow camera flights between anchored positions specified by slides.
-
-Tasks
-- Plugin @coolslides/plugins-transition-three:
-  - Uses StageManager to mount a WebGL canvas; initialises a Three.js scene and camera.
-  - Slide meta.sceneTarget { position, lookAt or quaternion, fov, duration, easing }.
-  - On transition between two slides with sceneTarget, tween camera; fade DOM slides as needed.
-  - Respect reduced motion.
-- Provide a small sample deck where next slide is “inside” the scene.
-
-Acceptance
-- Demo shows camera flights; when transition ends, next slide becomes active and DOM fades in cleanly.
-
-Files
-- packages/plugins-stdlib/src/transition-three (new)
-- Example deck (examples/three-demo)
-
-B6. Rooms sync for steps and transitions
-Context
-- Keep audience in sync for custom advances and long transitions.
-
-Tasks
-- Emit/consume:
-  - advance:step { slideId, stepIndex } on bus and rooms
-  - transition:begin/end { from, to, type } for optional audience visuals
-- Ensure audience ignores local keys while a transition is running.
-
-Acceptance
-- In two tabs with same ?room, stepping CodeSlide advances both; transitions run in both.
-
-Files
-- packages/runtime/src/init.ts (rooms wiring)
-- packages/runtime/src/router.ts or transitions.ts (emit events)
+- `packages/runtime/src/init.ts` (rooms wiring and event forwarding)
+- `packages/runtime/src/router.ts` (emit `fragment:change`)
+- `packages/components/src/slides/CodeSlide.ts` (emit `advance:step`)
 
 -------------------------------------------------------------------------------
 
-Milestone C: Polishing and UI (later)
+Bugs and small fixes
 
-C1. Component Playground (devserver page)
-Tasks
-- Route /playground: list installed components (from manifests), a live prop editor (JSON), render preview in an iframe or inline, and a “Generate TOML” button to export a ready-to-paste slide.
-- Security: sanitize/limit arbitrary code; load only installed components.
+F1. PollWidget print snapshot (FIX)
+Problem
+- `PollWidget.generatePrintSnapshot()` calls `this.context.bus.emit(...)` which returns void; it never retrieves results.
+
+Fix
+- Store results in plugin-managed KV (`storage.kv('poll')`) keyed by `poll:<id>:results` and have PollWidget read that if present when generating print view.
+- Alternatively, emit a request event and have the plugin write results into a known DOM data attribute before print; KV approach is simpler.
 
 Acceptance
-- Playground works for first-party components and any installed from taps; TOML snippet is accurate.
+- Print export shows latest poll results when `showResults = true`.
 
 Files
-- apps/devserver/src/lib.rs (new route)
-- static/playground/* (assets)
+- `packages/plugins-stdlib/src/poll/index.ts` (persist results)
+- `packages/components/src/widgets/PollWidget.ts` (read persisted results for print)
 
-C2. Simple UI (future)
-- A UI wrapping CLI commands to init decks, add components/plugins, create slides from schemas, and edit props visually. Out of scope for now.
+F2. Rooms fragment events (ENHANCEMENT)
+- Emit `fragment:change` in router and forward over rooms to improve audience sync.
+
+Files
+- `packages/runtime/src/router.ts`, `packages/runtime/src/init.ts`.
+
+F3. Lockfile schema alignment (DOC + LINT)
+- Add `docs/lockfile.md` describing fields (modelVersion, importMap, resolved with integrity). Consider removing unspecified fields like `irVersion` from generated lockfile or document it explicitly and extend IR if needed.
+
+Files
+- `docs/lockfile.md`
+- `apps/cli/src/main.rs` (lockfile writer)
+
+F4. Devserver: mount deck directory (see A8)
+- Implemented as part of A8.
+
+F5. Docs tidy
+- `docs/DEMO.md`: fix export command; mention `?room=<id>`; note `?offline=1` toggle; add speaker view shortcut (Cmd/Ctrl+Shift+S).
 
 -------------------------------------------------------------------------------
 
 Determinism and security
 
-Lockfile (.coolslides.lock)
-- Include:
-  - SRI for all JS/CSS assets in import map
-  - For code-sourced content: git blob hash and embedded content hash
-  - Tap source info and version pins
-- docs/lockfile.md explaining structure and how exports honor it
+Lockfile and SRI (A3)
+- Hash all JS/CSS assets in import map; embed SRI in lockfile; export should embed import map and, optionally, integrity attributes when served via http(s). HTML export continues to rewrite `/packages` to `./packages` with copied assets for `file://` usage.
 
-Exports
-- HTML: embed import map; rewrite /packages to relative; include SRI or inline CSS
-- PDF: already deterministic; ensure code content is embedded and KaTeX CSS is included when math plugin is used
+Exports (current)
+- HTML: OK; writes `index.html`, rewrites `/packages` to `./packages`, copies package dists.
+- PDF: uses Chrome/Chromium headless with virtual time budget; expands fragments and waits for fonts/images.
 
-Rooms and strict/offline modes
-- Keep devserver strict mode toggle; runtime should refuse networked capabilities in offline mode or provide no-op shims with warnings
-
--------------------------------------------------------------------------------
-
-Implementation notes and references
-
-- Keep TOML as the only authoring format. Simplicity comes from scaffolding and UI, not by adding parallel file formats.
-- onAdvance is the first-class hook that lets components consume “next/prev” before the router moves on.
-- Transition Orchestrator and StageManager provide a generic substrate for users to implement advanced 2D/3D transitions—including “big-canvas” flights—without imposing that model globally.
-- Themes/tokens and plugins align with the “taps” marketplace approach. Components, widgets, plugins, themes, tokens, slides, and templates should be publishable units.
+Strict/offline modes
+- Runtime adapters degrade in offline mode; devserver strict sanitizer remains tight.
 
 -------------------------------------------------------------------------------
 
 Task checklist (short form)
 
-Foundation
-- [ ] A1 Verify capability adapters and document capabilities
-- [ ] A2 Implement CLI: init/new/add with --no-git; scaffold TOML from schemas
-- [ ] A3 Taps: tap add/search/publish; index.json schema; lockfile with SRI
-- [ ] A4 CodeSlide v2: devserver git resolve; onAdvance stepper; export embed; syntax highlighter addon
-- [ ] A5 Math plugin (KaTeX) + sanitization switch
+High priority
+- [ ] A7 Rooms adapter: wrap/unwrap events so poll messages propagate
+- [ ] A8 Serve deck-local assets at /deck; rewrite theme/tokens links in dev HTML
+- [ ] F1 PollWidget print snapshot via KV
+- [ ] Docs: Fix export command in README.md and docs/DEMO.md
+- [ ] A4 CodeSlide wrap/overflow/dim + auto-scroll improvements
+
+Near-term
+- [ ] A5 Math plugin reliability + KaTeX guidance
+- [ ] B6 Rooms sync: `advance:step`, `fragment:change`, transition events
+- [ ] F3 Lockfile docs and schema alignment
+
+Mid-term
+- [ ] A3 Taps/registry + SRI
+- [ ] B2 Transition Orchestrator
+- [ ] B3 StageManager
 - [ ] A6 Overview mode plugin
 
-Transitions
-- [ ] B1 Router onAdvance integration; CodeSlide implements onAdvance
-- [ ] B2 Transition Orchestrator and default handlers
-- [ ] B3 StageManager (persistent layers)
-- [ ] B4 2D Pan/Zoom transition driver plugin
-- [ ] B5 Three.js transition driver plugin and sample deck
-- [ ] B6 Rooms sync for steps and transitions
-
-Polish
-- [ ] C1 Component Playground
-- [ ] C2 Simple UI (deferred)
+Later
+- [ ] B4 2D pan/zoom driver
+- [ ] B5 Three.js driver + demo
 
 -------------------------------------------------------------------------------
 
 File map (where to implement)
-- CLI: apps/cli/src/main.rs (+ helpers)
-- Devserver: apps/devserver/src/lib.rs (routes), export.rs (no change), rooms.rs (sync events)
-- Runtime: packages/runtime/src/router.ts, init.ts, transitions.ts (new), stage.ts (new), plugins.ts (adapters)
-- Components: packages/components/src/slides/CodeSlide.ts (stepper, git-source), others unchanged
-- Stdlib plugins: packages/plugins-stdlib/src/(math, overview, transition-2d, transition-three) (new)
-- Core/IR: Keep IR as-is; embed code content in props during export (no schema change required)
-- Docs: docs/capabilities.md, docs/taps.md, docs/lockfile.md, docs/codeslide.md, docs/transitions.md
+- CLI: `apps/cli/src/main.rs` (taps, lockfile SRI, docs alignment)
+- Devserver: `apps/devserver/src/lib.rs` (serve deck; dev HTML link rewrite), `rooms.rs` (unchanged; will now carry poll events)
+- Runtime: 
+  - `packages/runtime/src/plugins.ts` (rooms adapter fix)
+  - `packages/runtime/src/router.ts` (emit fragment change)
+  - `packages/runtime/src/init.ts` (rooms wiring for steps/fragments)
+  - `packages/runtime/src/transitions.ts` (new), `packages/runtime/src/stage.ts` (new)
+- Components: `packages/components/src/slides/CodeSlide.ts` (polish)
+- Stdlib plugins: 
+  - `packages/plugins-stdlib/src/poll/index.ts` (KV results)
+  - `packages/plugins-stdlib/src/overview/*` (new)
+  - `packages/plugins-stdlib/src/math/index.ts` (logging/retry)
+- Docs: `docs/capabilities.md`, `docs/DEMO.md`, `docs/lockfile.md`, `docs/transitions.md`, `docs/taps.md`
 
 Acceptance testing
-- examples/basic-deck runs and exports; poll demo works; overview mode toggles; math slide renders; CodeSlide git-source demo works and exports.
-- Transition demos (2D and Three.js) run in a separate examples deck.
-- Rooms sync mirrors steps and transitions across tabs.
+- examples/basic-deck: dev + validate + export html/pdf succeed; tokens/theme load from deck; poll demo syncs across tabs; print shows poll results.
+- examples/showcase: math renders consistently; CodeSlide steps/scroll/highlighting behave; `?room=<id>` sync works for slide changes and steps.
+- Transition demos (later): 2D and Three.js examples run and export.
 
-This plan is intended to be saved as plan.md at the repository root. Coding agents should use the “Tasks” and “Acceptance” sections under each milestone to implement and validate features.
-
--------------------------------------------------------------------------------
-
-Progress Update (current)
-
-Implemented
-- A1 Capability adapters: Verified and documented (docs/capabilities.md). Stdlib plugins (poll, notes, telemetry) load in examples and use adapters (logger/router on ctx; storage.kv callable + default object; ui.notifications + ui.toast alias; rooms.ws wrapper; telemetry.events → bus).
-- A2 CLI: Init/new/add implemented with templates, prompts, lockfile skeleton, import map detection, and `--open`. Templates added under templates/*.
-- A4 CodeSlide v2: Dev `/api/code/resolve`; CodeSlide fetches git ranges; export embeds content; stepper via onAdvance; indentation preserved; docs added.
-- A5 Math plugin: Initial plugin added (inline + block math with KaTeX fallback); devserver sanitizer “allow_math” toggle; docs added.
-- B1 onAdvance: Router calls component onAdvance before fragment/slide navigation; docs/transitions.md.
-- Examples: examples/showcase deck demonstrating CodeSlide (git + steps), math slide, and poll widget.
-
-Partially complete / follow-ups
-- A2 Lockfile determinism: .coolslides.lock lacks SRI/hashes (A3 will add and exporters will honor).
-- A4 Syntax highlighting: Fallback only; Prism/Highlight add-on still pending. Code formatting improved but needs configurable wrap/overflow/shrink.
-- A5 Math: More robust processing added (placeholder marking + mutation observer), but needs end-to-end verification in showcase and optional KaTeX asset include for full typesetting.
-
-Known Issues (open)
-- CodeSlide overflow/format:
-  - Long lines overflow; add props: wrap (on|off), overflowX (scroll|hidden), optional fitMode (shrink) with min/max font sizes; dimUnfocused lines during steps.
-  - Auto-scroll code container to bring target line into view when stepping (currently best-effort; refine).
-- Math in showcase: Intermittent non-rendering observed; verify plugin loads and sanitizer path; add lightweight debug logs and (optionally) include KaTeX assets in the showcase for a fully rendered demo.
-- tokens.css 404: Investigate missing tokens path in some runs; dev should serve themes reliably (verify deck.theme/tokens paths and static mounts).
-- Runtime prop timing: We added whenDefined retry + delayed reapply; consider a more targeted whenDefined strategy per known tags to reduce redundant work.
-- Stdlib plugins: Now initialize with logger/router and storage.kv; keep an eye on storage API expectations (callable vs object) across plugins.
-
-Next Priorities
-- A4 polish: Implement CodeSlide wrap/overflowX/dim props; add Prism highlighter add-on.
-- A5 polish: Ensure math renders consistently; optional KaTeX include in showcase; add debug logs for math processing.
-- A3 taps + lockfile SRI: Implement taps (add/search/publish) and lockfile SRI/hashing for JS/CSS and git content; update exporters.
-- B2/B3 transitions: Transition Orchestrator + StageManager.
-- B6 rooms sync for steps: Emit/consume `advance:step` over rooms to mirror CodeSlide steps across tabs.
+Notes
+- Keep TOML as the only authoring format.
+- Make onAdvance the primary hook for component-driven navigation.
+- Transition Orchestrator + StageManager provide the substrate for advanced transitions without imposing a global big‑canvas model.
