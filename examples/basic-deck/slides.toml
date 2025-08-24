@@ -6,7 +6,9 @@ theme = "themes/default/theme.css"
 tokens = "themes/default/tokens.css"
 
 plugins = [
-  "/packages/plugins-stdlib/dist/demo/index.js"
+  "/packages/plugins-stdlib/dist/poll/index.js",
+  "/packages/plugins-stdlib/dist/notes/index.js",
+  "/packages/plugins-stdlib/dist/telemetry/index.js"
 ]
 
 [transitions]
