@@ -95,17 +95,22 @@ export async function init(deck?: DeckManifest, slides?: SlideDoc[]): Promise<Ru
     importMap: await loadImportMap()
   });
   const importMap = await loadImportMap();
+  const offline = getOfflineFlag();
   
   // Rooms client (room from ?room= or default)
   const rooms = new RoomsClient(bus, {});
-  rooms.connect();
+  if (!offline) {
+    rooms.connect();
+  } else {
+    console.warn('Rooms disabled (offline mode)');
+  }
   // Forward navigation events to room for basic sync
   bus.on('slide:enter', ({ slideId, fragment }) => {
     try { rooms.sendEvent('slide:change', { slideId, fragment }); } catch {}
   });
   
   // Plugin manager (load deck.plugins if provided)
-  const pluginManager = new PluginManager(context, bus, importMap);
+  const pluginManager = new PluginManager(context, bus, importMap, { offline });
   if (Array.isArray(deckData.plugins) && deckData.plugins.length) {
     try { await pluginManager.loadAll(deckData.plugins); } catch (e) { console.warn('Plugins init failed', e); }
   }
@@ -240,6 +245,16 @@ function setupGlobalKeyboardShortcuts(bus: SimpleEventBus, speakerView: DefaultS
       bus.emit('keyboard:help');
     }
   });
+}
+
+function getOfflineFlag(): boolean {
+  try {
+    const u = new URL(location.href);
+    const v = u.searchParams.get('offline');
+    return v === '1' || v === 'true';
+  } catch {
+    return false;
+  }
 }
 
 export function getRuntimeContext(): RuntimeContext | null {

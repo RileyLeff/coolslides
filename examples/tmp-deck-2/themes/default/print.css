@@ -1,0 +1,381 @@
+/**
+ * Coolslides Default Print Styles
+ * Optimized for handout and archival PDF exports
+ */
+
+/* Import base theme */
+@import './theme.css';
+
+/* Print-specific overrides */
+@media print {
+  @page {
+    size: A4;
+    margin: 1in;
+  }
+
+  @page :first {
+    margin-top: 1.5in;
+  }
+
+  /* Reset for print */
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+    color-adjust: exact;
+  }
+
+  html {
+    font-size: 12pt;
+    line-height: 1.4;
+  }
+
+  body {
+    background: white !important;
+    color: black !important;
+    font-family: Georgia, 'Times New Roman', serif;
+  }
+
+  /* Slide layout for print */
+  .coolslides-presentation {
+    width: auto;
+    height: auto;
+    overflow: visible;
+    position: static;
+  }
+
+  .coolslides-slide {
+    position: static !important;
+    display: block !important;
+    width: auto;
+    height: auto;
+    page-break-after: always;
+    page-break-inside: avoid;
+    margin-bottom: 2rem;
+    padding: 1rem;
+    border: none;
+  }
+
+  .coolslides-slide:last-child {
+    page-break-after: avoid;
+    margin-bottom: 0;
+  }
+
+  /* Remove all animations and transitions */
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+
+  /* Fragment handling */
+  .fragment-hidden {
+    opacity: 1 !important;
+    transform: none !important;
+    display: block !important;
+  }
+
+  .fragment-visible {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  /* Component-specific print styles */
+  cs-title-slide {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 8in;
+    padding: 2rem;
+  }
+
+  cs-title-slide .title {
+    font-size: 36pt !important;
+    font-weight: bold;
+    margin-bottom: 1rem;
+    color: black !important;
+  }
+
+  cs-title-slide .subtitle {
+    font-size: 18pt !important;
+    color: #333 !important;
+    font-weight: normal;
+  }
+
+  cs-two-col-slide {
+    display: block;
+    padding: 1rem;
+  }
+
+  cs-two-col-slide .columns {
+    display: flex;
+    gap: 2rem;
+    align-items: flex-start;
+  }
+
+  cs-two-col-slide .column-left,
+  cs-two-col-slide .column-right {
+    flex: 1;
+  }
+
+  cs-quote-slide {
+    text-align: center;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 6in;
+    padding: 2rem;
+  }
+
+  cs-quote-slide .quote-mark {
+    font-size: 48pt !important;
+    color: #666 !important;
+    margin-bottom: 1rem;
+  }
+
+  cs-quote-slide .quote-text {
+    font-size: 24pt !important;
+    font-style: italic;
+    color: black !important;
+    margin-bottom: 2rem;
+    line-height: 1.4;
+  }
+
+  cs-quote-slide .attribution {
+    font-size: 14pt !important;
+    color: #333 !important;
+  }
+
+  /* Typography for print */
+  h1, h2, h3, h4, h5, h6 {
+    color: black !important;
+    page-break-after: avoid;
+    font-weight: bold;
+  }
+
+  h1 {
+    font-size: 24pt;
+    margin: 0 0 1rem 0;
+  }
+
+  h2 {
+    font-size: 20pt;
+    margin: 1.5rem 0 1rem 0;
+  }
+
+  h3 {
+    font-size: 16pt;
+    margin: 1rem 0 0.5rem 0;
+  }
+
+  h4, h5, h6 {
+    font-size: 14pt;
+    margin: 1rem 0 0.5rem 0;
+  }
+
+  p {
+    margin: 0 0 1rem 0;
+    color: black !important;
+    font-size: 12pt;
+    line-height: 1.4;
+    orphans: 3;
+    widows: 3;
+  }
+
+  /* Links */
+  a {
+    color: black !important;
+    text-decoration: underline;
+  }
+
+  a[href^="http"]:after {
+    content: " (" attr(href) ")";
+    font-size: 10pt;
+    color: #666;
+    word-break: break-all;
+  }
+
+  /* Lists */
+  ul, ol {
+    margin: 0 0 1rem 0;
+    padding-left: 1.5rem;
+  }
+
+  li {
+    margin-bottom: 0.25rem;
+    page-break-inside: avoid;
+  }
+
+  /* Code blocks */
+  pre {
+    background: #f5f5f5 !important;
+    border: 1px solid #ccc !important;
+    padding: 0.5rem;
+    font-size: 10pt;
+    page-break-inside: avoid;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+  }
+
+  code {
+    background: #f0f0f0 !important;
+    padding: 0.1rem 0.2rem;
+    font-size: 10pt;
+    border: 1px solid #ddd;
+  }
+
+  /* Tables */
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-size: 10pt;
+    page-break-inside: avoid;
+  }
+
+  th, td {
+    border: 1px solid #333 !important;
+    padding: 0.25rem 0.5rem;
+    text-align: left;
+  }
+
+  th {
+    background: #f0f0f0 !important;
+    font-weight: bold;
+  }
+
+  /* Images */
+  img {
+    max-width: 100% !important;
+    height: auto !important;
+    page-break-inside: avoid;
+    display: block;
+    margin: 0.5rem auto;
+  }
+
+  /* Blockquotes */
+  blockquote {
+    border-left: 4px solid #333 !important;
+    padding-left: 1rem;
+    margin: 1rem 0;
+    font-style: italic;
+    page-break-inside: avoid;
+  }
+
+  /* Page numbers and headers */
+  @page :left {
+    @bottom-left {
+      content: counter(page);
+      font-size: 10pt;
+      color: #666;
+    }
+  }
+
+  @page :right {
+    @bottom-right {
+      content: counter(page);
+      font-size: 10pt;
+      color: #666;
+    }
+  }
+
+  /* Header with deck title */
+  @page :first {
+    @top-center {
+      content: attr(data-deck-title);
+      font-size: 12pt;
+      font-weight: bold;
+    }
+  }
+
+  /* Footer template support */
+  @page {
+    @bottom-center {
+      content: var(--print-footer, "");
+      font-size: 10pt;
+      color: #666;
+    }
+  }
+
+  /* Hide interactive elements */
+  button,
+  input,
+  select,
+  textarea,
+  .no-print {
+    display: none !important;
+  }
+
+  /* Expand collapsed sections */
+  details {
+    page-break-inside: avoid;
+  }
+
+  details summary {
+    display: none;
+  }
+
+  details[open] summary ~ * {
+    display: block !important;
+  }
+
+  /* Utility classes for print */
+  .print-only {
+    display: block !important;
+  }
+
+  .screen-only {
+    display: none !important;
+  }
+
+  .page-break-before {
+    page-break-before: always;
+  }
+
+  .page-break-after {
+    page-break-after: always;
+  }
+
+  .page-break-inside-avoid {
+    page-break-inside: avoid;
+  }
+
+  /* QR codes for links (if present) */
+  .qr-code {
+    max-width: 1in;
+    max-height: 1in;
+    float: right;
+    margin: 0 0 0.5rem 0.5rem;
+  }
+}
+
+/* Handout-specific styles */
+@media print and (min-resolution: 150dpi) {
+  /* High-DPI print styles */
+  html {
+    font-size: 11pt;
+  }
+
+  h1 {
+    font-size: 22pt;
+  }
+
+  h2 {
+    font-size: 18pt;
+  }
+}
+
+/* Archival quality styles */
+.print-archival {
+  /* Preserve colors for archival */
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  color-adjust: exact !important;
+}
+
+.print-archival * {
+  -webkit-print-color-adjust: exact !important;
+  print-color-adjust: exact !important;
+  color-adjust: exact !important;
+}

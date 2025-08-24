@@ -1,0 +1,12 @@
+modelVersion = "1.0"
+title = "New Presentation"
+theme = "themes/default/theme.css"
+tokens = "themes/default/tokens.css"
+plugins = ["@coolslides/plugins-stdlib"]
+
+[transitions]
+default = "slide"
+
+[[sequence]]
+type = "ref"
+ref = "intro"

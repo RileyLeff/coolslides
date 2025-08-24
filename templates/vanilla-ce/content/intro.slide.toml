@@ -1,0 +1,14 @@
+# Intro Slide
+
+modelVersion = "1.0"
+id = "intro"
+
+[component]
+name = "TitleSlide"
+versionReq = "^1"
+
+[props]
+title = "Welcome to Coolslides (Vanilla CE)"
+# subtitle = "Optional subtitle here"
+# alignment = "center"  # left|center|right
+

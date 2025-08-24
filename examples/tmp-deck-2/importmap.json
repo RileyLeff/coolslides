@@ -1,0 +1,8 @@
+{
+  "imports": {
+    "@coolslides/component-sdk": "/packages/component-sdk/dist/index.js",
+    "@coolslides/components": "/packages/components/dist/index.js",
+    "@coolslides/plugins-stdlib": "/packages/plugins-stdlib/dist/index.js",
+    "@coolslides/runtime": "/packages/runtime/dist/index.js"
+  }
+}

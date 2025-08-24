@@ -41,15 +41,21 @@ export interface PluginModule {
   init?: (ctx: { context: RuntimeContext; bus: EventBus; capabilities: CapabilityMap }) => Promise<void> | void;
 }
 
+export interface PluginManagerOptions {
+  offline?: boolean;
+}
+
 export class PluginManager {
   private bus: EventBus;
   private context: RuntimeContext;
   private importMap: Record<string, string>;
+  private opts: PluginManagerOptions;
 
-  constructor(context: RuntimeContext, bus: EventBus, importMap: Record<string, string>) {
+  constructor(context: RuntimeContext, bus: EventBus, importMap: Record<string, string>, opts: PluginManagerOptions = {}) {
     this.context = context;
     this.bus = bus;
     this.importMap = importMap;
+    this.opts = opts;
   }
 
   async loadAll(specs: string[]): Promise<void> {
@@ -66,12 +72,18 @@ export class PluginManager {
   }
 
   private async initialize(plugin: PluginModule): Promise<void> {
+    const offline = !!this.opts.offline;
     const caps: CapabilityMap = {
       // Provide object form with fetch method; also keep callable behavior
-      'network.fetch': Object.assign(
-        (input: RequestInfo, init?: RequestInit) => fetch(input, init),
-        { fetch: (url: string, init?: RequestInit) => fetch(url, init) }
-      ),
+      'network.fetch': offline
+        ? Object.assign(
+            (_input: RequestInfo, _init?: RequestInit) => Promise.reject(new Error('offline mode: network disabled')),
+            { fetch: (_url: string, _init?: RequestInit) => Promise.reject(new Error('offline mode: network disabled')) }
+          )
+        : Object.assign(
+            (input: RequestInfo, init?: RequestInit) => fetch(input, init),
+            { fetch: (url: string, init?: RequestInit) => fetch(url, init) }
+          ),
       'storage.kv': (ns: string) => this.makeAsyncKV(ns),
       'ui.notifications': {
         show: (m: string) => this.showToast(m),
@@ -80,7 +92,7 @@ export class PluginManager {
       },
       'ui.toast': { toast: (m: string) => this.showToast(m) },
       'rooms.ws': {
-        connect: (roomId: string) => this.makeWsConnection(roomId),
+        connect: (roomId: string) => offline ? this.makeWsStub(roomId) : this.makeWsConnection(roomId),
       },
       'telemetry.events': {
         track: (name: string, props?: any) => this.bus.emit('telemetry:track', { name, props }),
@@ -130,6 +142,18 @@ export class PluginManager {
       onMessage: (cb: (d: any) => void) => { handlers.msg = cb; },
       onClose: (cb: () => void) => { handlers.close = cb; },
       close: () => ws.close(),
+    };
+  }
+
+  private makeWsStub(_roomId: string) {
+    const handlers: { msg?: (d: any) => void; close?: () => void } = {};
+    // Emit a warning once
+    try { console.warn('rooms.ws disabled (offline mode)'); } catch {}
+    return {
+      send: (_data: any) => { /* no-op */ },
+      onMessage: (cb: (d: any) => void) => { handlers.msg = cb; },
+      onClose: (cb: () => void) => { handlers.close = cb; },
+      close: () => { try { handlers.close?.(); } catch {} },
     };
   }
 

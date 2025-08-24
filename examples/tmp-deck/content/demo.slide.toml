@@ -1,0 +1,15 @@
+# Slide: demo (component: TwoColSlide)
+
+modelVersion = "1.0"
+id = "demo"
+
+[component]
+name = "TwoColSlide"
+versionReq = "^1"
+
+[props]
+# gap = ""  # default: "2rem"
+# leftWidth = ""  # default: "50%"
+# rightWidth = ""  # default: "50%"
+# title = ""
+# verticalAlign = ""  # default: "top"

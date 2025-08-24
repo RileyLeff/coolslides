@@ -1,0 +1,16 @@
+# Coolslides Deck (Vanilla CE template)
+
+modelVersion = "1.0"
+title = "New Presentation"
+theme = "themes/default/theme.css"
+tokens = "themes/default/tokens.css"
+
+plugins = []
+
+[transitions]
+default = "slide"
+
+[[sequence]]
+type = "ref"
+ref = "intro"
+
