@@ -84,7 +84,10 @@ export class PluginManager {
             (input: RequestInfo, init?: RequestInit) => fetch(input, init),
             { fetch: (url: string, init?: RequestInit) => fetch(url, init) }
           ),
-      'storage.kv': (ns: string) => this.makeAsyncKV(ns),
+      'storage.kv': Object.assign(
+        (ns: string) => this.makeAsyncKV(ns),
+        this.makeAsyncKV('deck')
+      ),
       'ui.notifications': {
         show: (m: string) => this.showToast(m),
         notification: (title: string, body?: string) => this.showToast(`${title}${body ? ': ' + body : ''}`),
@@ -101,7 +104,16 @@ export class PluginManager {
       },
     };
     if (plugin.init) {
-      await plugin.init({ context: this.context, bus: this.bus, capabilities: caps });
+      const ctx: any = {
+        deck: this.context.deck,
+        slide: null,
+        router: this.context.router,
+        logger: console,
+        bus: this.bus,
+        capabilities: caps,
+        context: this.context, // keep for back-compat
+      };
+      await plugin.init(ctx);
     }
   }
 

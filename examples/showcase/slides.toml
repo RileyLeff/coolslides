@@ -1,0 +1,33 @@
+# Coolslides Showcase Deck
+
+modelVersion = "1.0"
+title = "Coolslides Showcase"
+theme = "themes/default/theme.css"
+tokens = "themes/default/tokens.css"
+
+plugins = [
+  "/packages/plugins-stdlib/dist/math/index.js",
+  "/packages/plugins-stdlib/dist/poll/index.js",
+  "/packages/plugins-stdlib/dist/notes/index.js",
+  "/packages/plugins-stdlib/dist/telemetry/index.js"
+]
+
+[transitions]
+default = "slide"
+
+[[sequence]]
+type = "ref"
+ref = "intro"
+
+[[sequence]]
+type = "ref"
+ref = "code-git"
+
+[[sequence]]
+type = "ref"
+ref = "math-demo"
+
+[[sequence]]
+type = "ref"
+ref = "poll-demo"
+

@@ -124,6 +124,9 @@ export class CodeSlide extends CoolslidesElement {
 
   constructor() {
     super();
+    // Ensure complex props exist so runtime can assign them as properties (not attributes)
+    (this as any).source = undefined;
+    (this as any).steps = undefined;
     this.useTokens([
       '--title-color',
       '--title-size',
@@ -138,12 +141,12 @@ export class CodeSlide extends CoolslidesElement {
 
   connectedCallback(): void {
     super.connectedCallback();
-    // Initialize syntax highlighter without making the callback async
-    (async () => {
+    // Initialize syntax highlighter after current task to avoid TDZ during module evaluation
+    setTimeout(async () => {
       this.highlighter = new SyntaxHighlighter();
       await this.highlighter.initialize();
       this.requestUpdate();
-    })();
+    }, 0);
   }
 
   protected update(): void {
@@ -297,6 +300,8 @@ export class CodeSlide extends CoolslidesElement {
           display: table-cell;
           padding-left: 1rem;
           width: 100%;
+          white-space: pre; /* preserve indentation and spacing */
+          font-family: inherit;
         }
 
         /* Highlighted line styles */

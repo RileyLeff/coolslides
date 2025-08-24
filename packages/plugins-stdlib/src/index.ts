@@ -8,6 +8,7 @@
 export { default as PollPlugin } from './poll/index.js';
 export { default as NotesPlugin } from './notes/index.js';
 export { default as TelemetryPlugin } from './telemetry/index.js';
+export { default as MathPlugin } from './math/index.js';
 
 // Plugin manifest for registry
 export const STDLIB_PLUGINS = {
@@ -36,6 +37,15 @@ export const STDLIB_PLUGINS = {
     capabilities: ['network.fetch', 'storage.kv', 'telemetry.events'],
     tags: ['analytics', 'monitoring', 'performance'],
     module: './telemetry/index.js'
+  }
+  ,
+  'math': {
+    name: '@coolslides/plugins-math',
+    version: '1.0.0',
+    description: 'Inline and block math rendering (KaTeX-compatible hook)',
+    capabilities: [],
+    tags: ['math', 'katex'],
+    module: './math/index.js'
   }
 } as const;
 

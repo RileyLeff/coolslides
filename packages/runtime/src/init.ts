@@ -88,6 +88,10 @@ export async function init(deck?: DeckManifest, slides?: SlideDoc[]): Promise<Ru
 
   const propertyManager = new RuntimePropertyManager(bus);
   propertyManager.initialize();
+  // Re-apply props shortly after to catch components that register after runtime loads
+  setTimeout(() => {
+    try { propertyManager.initialize(); } catch {}
+  }, 100);
 
   // Initialize module loader for dynamic components
   new DynamicModuleLoader(bus, {

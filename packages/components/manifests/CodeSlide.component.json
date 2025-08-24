@@ -23,11 +23,24 @@
         "type": "object",
         "description": "Optional external code source (devserver resolves)",
         "properties": {
-          "type": { "type": "string", "enum": ["git"] },
-          "repo": { "type": "string" },
-          "ref": { "type": "string" },
-          "file": { "type": "string" },
-          "lines": { "type": "string" }
+          "type": {
+            "type": "string",
+            "enum": [
+              "git"
+            ]
+          },
+          "repo": {
+            "type": "string"
+          },
+          "ref": {
+            "type": "string"
+          },
+          "file": {
+            "type": "string"
+          },
+          "lines": {
+            "type": "string"
+          }
         }
       },
       "language": {

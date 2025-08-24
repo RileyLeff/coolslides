@@ -1,0 +1,14 @@
+# Showcase Intro
+
+modelVersion = "1.0"
+id = "intro"
+
+[component]
+name = "TitleSlide"
+versionReq = "^1"
+
+[props]
+title = "Coolslides Showcase"
+# subtitle = "CodeSlide v2, Math, Plugins, onAdvance"
+# alignment = "center"
+

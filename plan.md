@@ -385,3 +385,36 @@ Acceptance testing
 - Rooms sync mirrors steps and transitions across tabs.
 
 This plan is intended to be saved as plan.md at the repository root. Coding agents should use the “Tasks” and “Acceptance” sections under each milestone to implement and validate features.
+
+-------------------------------------------------------------------------------
+
+Progress Update (current)
+
+Implemented
+- A1 Capability adapters: Verified and documented (docs/capabilities.md). Stdlib plugins (poll, notes, telemetry) load in examples and use adapters (logger/router on ctx; storage.kv callable + default object; ui.notifications + ui.toast alias; rooms.ws wrapper; telemetry.events → bus).
+- A2 CLI: Init/new/add implemented with templates, prompts, lockfile skeleton, import map detection, and `--open`. Templates added under templates/*.
+- A4 CodeSlide v2: Dev `/api/code/resolve`; CodeSlide fetches git ranges; export embeds content; stepper via onAdvance; indentation preserved; docs added.
+- A5 Math plugin: Initial plugin added (inline + block math with KaTeX fallback); devserver sanitizer “allow_math” toggle; docs added.
+- B1 onAdvance: Router calls component onAdvance before fragment/slide navigation; docs/transitions.md.
+- Examples: examples/showcase deck demonstrating CodeSlide (git + steps), math slide, and poll widget.
+
+Partially complete / follow-ups
+- A2 Lockfile determinism: .coolslides.lock lacks SRI/hashes (A3 will add and exporters will honor).
+- A4 Syntax highlighting: Fallback only; Prism/Highlight add-on still pending. Code formatting improved but needs configurable wrap/overflow/shrink.
+- A5 Math: More robust processing added (placeholder marking + mutation observer), but needs end-to-end verification in showcase and optional KaTeX asset include for full typesetting.
+
+Known Issues (open)
+- CodeSlide overflow/format:
+  - Long lines overflow; add props: wrap (on|off), overflowX (scroll|hidden), optional fitMode (shrink) with min/max font sizes; dimUnfocused lines during steps.
+  - Auto-scroll code container to bring target line into view when stepping (currently best-effort; refine).
+- Math in showcase: Intermittent non-rendering observed; verify plugin loads and sanitizer path; add lightweight debug logs and (optionally) include KaTeX assets in the showcase for a fully rendered demo.
+- tokens.css 404: Investigate missing tokens path in some runs; dev should serve themes reliably (verify deck.theme/tokens paths and static mounts).
+- Runtime prop timing: We added whenDefined retry + delayed reapply; consider a more targeted whenDefined strategy per known tags to reduce redundant work.
+- Stdlib plugins: Now initialize with logger/router and storage.kv; keep an eye on storage API expectations (callable vs object) across plugins.
+
+Next Priorities
+- A4 polish: Implement CodeSlide wrap/overflowX/dim props; add Prism highlighter add-on.
+- A5 polish: Ensure math renders consistently; optional KaTeX include in showcase; add debug logs for math processing.
+- A3 taps + lockfile SRI: Implement taps (add/search/publish) and lockfile SRI/hashing for JS/CSS and git content; update exporters.
+- B2/B3 transitions: Transition Orchestrator + StageManager.
+- B6 rooms sync for steps: Emit/consume `advance:step` over rooms to mirror CodeSlide steps across tabs.

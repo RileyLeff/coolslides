@@ -1,0 +1,35 @@
+# Poll widget demo (dynamic slot)
+
+modelVersion = "1.0"
+id = "poll-demo"
+
+[component]
+name = "TwoColSlide"
+versionReq = "^1"
+
+[props]
+title = "Live Poll"
+leftWidth = "55%"
+rightWidth = "45%"
+
+[slots.left]
+kind = "markdown"
+value = """
+### Live Poll
+
+- Uses the standard library Poll plugin (rooms + storage)
+- Widget loads dynamically in the right column
+- Submit a vote and watch results update
+"""
+
+[slots.right]
+kind = "component"
+tag = "cs-poll"
+module = "/packages/components/dist/widgets/PollWidget.js"
+defer = "visible"
+
+[slots.right.props]
+question = "Which feature interests you most?"
+options = ["CodeSlide v2", "Math", "onAdvance", "Transitions", "Taps/Registry"]
+showResults = true
+

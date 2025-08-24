@@ -24,12 +24,12 @@ pub mod rooms;
 #[derive(Clone)]
 pub struct SanitizationConfig {
     pub strict_mode: bool,
+    pub allow_math: bool,
 }
 
 impl SanitizationConfig {
-    pub fn new(strict_mode: bool) -> Self {
-        Self { strict_mode }
-    }
+    pub fn new(strict_mode: bool) -> Self { Self { strict_mode, allow_math: false } }
+    pub fn with_math(mut self, allow: bool) -> Self { self.allow_math = allow; self }
 }
 
 /// Development server state
@@ -293,7 +293,9 @@ async fn root_index(State(state): State<AppState>) -> Result<Html<String>, Statu
     };
 
     // For dev root, do NOT set a file:// base href; let assets load via http
-    let html = generate_export_html(&deck, &slides, components_registry.as_ref(), None, &state.sanitization_config)
+    let allow_math = deck.plugins.iter().any(|p| p.contains("plugins-math") || p.contains("/math/") || p.ends_with("math"));
+    let config = SanitizationConfig { strict_mode: state.sanitization_config.strict_mode, allow_math };
+    let html = generate_export_html(&deck, &slides, components_registry.as_ref(), None, &config)
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     Ok(Html(html))
@@ -602,7 +604,8 @@ async fn export_pdf(
         let comps_guard = state.components.read().await;
         comps_guard.clone()
     };
-    let slides_html = generate_slides_html(&deck, &slides, components_registry.as_ref(), &state.sanitization_config)
+    let allow_math = deck.plugins.iter().any(|p| p.contains("plugins-math") || p.contains("/math/") || p.ends_with("math"));
+    let slides_html = generate_slides_html(&deck, &slides, components_registry.as_ref(), &SanitizationConfig { strict_mode: state.sanitization_config.strict_mode, allow_math })
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
     // Configure export
@@ -783,6 +786,28 @@ fn render_markdown_to_html(markdown: &str, config: &SanitizationConfig) -> Strin
             .clean_content_tags(hashset!["script", "style"])
             .strip_comments(true)
             .link_rel(None) // Remove all link relations
+            .clean(&html_output)
+    } else if config.allow_math {
+        // Math-friendly: allow spans/divs with classes so plugins (KaTeX) can render
+        ammonia::Builder::new()
+            .tags(hashset![
+                "p", "br", "strong", "em", "code", "pre",
+                "h1", "h2", "h3", "h4", "h5", "h6",
+                "ul", "ol", "li", "blockquote", "a", "img",
+                "table", "thead", "tbody", "tr", "td", "th",
+                "span", "div"
+            ])
+            .tag_attributes(hashmap![
+                "a" => hashset!["href", "title"],
+                "img" => hashset!["src", "alt", "title", "width", "height"],
+                "code" => hashset!["class"],
+                "pre" => hashset!["class"],
+                "span" => hashset!["class", "style"],
+                "div" => hashset!["class", "style"]
+            ])
+            .clean_content_tags(hashset!["script", "style"])
+            .strip_comments(true)
+            .link_rel(Some("noopener noreferrer"))
             .clean(&html_output)
     } else {
         // Default mode: presentation-friendly tags

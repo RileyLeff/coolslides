@@ -1,0 +1,31 @@
+# CodeSlide with git-sourced content and steps
+
+modelVersion = "1.0"
+id = "code-git"
+
+[component]
+name = "CodeSlide"
+versionReq = "^1"
+
+[props]
+title = "Router hotkeys and onAdvance"
+language = "ts"
+lineNumbers = true
+
+[props.source]
+type = "git"
+repo = "./"
+ref = "HEAD"
+file = "packages/runtime/src/router.ts"
+lines = "1-80"
+
+# Stepper demo: highlight and scroll to sections
+# You can step through with → and spacebar; the component will consume navigation until steps complete.
+[[props.steps]]
+highlight = "17-40"
+scrollTo = 17
+
+[[props.steps]]
+highlight = "60-80"
+scrollTo = 60
+
